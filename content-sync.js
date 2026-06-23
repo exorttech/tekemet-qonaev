@@ -223,6 +223,7 @@
 
     async function loadAndRender() {
         if (!window.TekemetSupabase || !window.TekemetSupabase.hasConfig()) {
+            await loadAndRenderFromBackend();
             return;
         }
 
@@ -296,6 +297,30 @@
             }
         } catch (error) {
             console.warn('Content render error:', error);
+        }
+    }
+
+    async function loadAndRenderFromBackend() {
+        try {
+            const response = await fetch('/.netlify/functions/tekemet-admin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getPublicContent', contentType: pageKind })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.error) {
+                console.warn('Content backend load failed:', payload.error || response.status);
+                return;
+            }
+
+            const records = payload.items || [];
+            if (pageKind === MENU_TYPE) {
+                renderMenuItems(records, null);
+            } else {
+                renderRoomItems(records, null);
+            }
+        } catch (error) {
+            console.warn('Content backend render error:', error);
         }
     }
 
