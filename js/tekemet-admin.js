@@ -1,5 +1,3 @@
-const SUPABASE_REST_URL = "https://khpqoafarltwaxcpamsy.supabase.co/rest/v1/";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_YbMGAeUr9CDU7fvGWmOfGQ_3SX6KYaB";
 const DEFAULT_RESTAURANT_SLUG = "tekemet-qonaev";
 const ADMIN_API_URL = getAdminApiUrl();
 const sessionKeyPrefix = "tekemet-admin-session:";
@@ -376,7 +374,7 @@ async function init() {
   ensureAdminEnhancements();
   applyTheme(localStorage.getItem(themeStorageKey) || document.documentElement.dataset.theme || "light");
   bindEvents();
-  await loadPublicRestaurantIdentity();
+  syncRestaurantIdentity();
   showLoginScreen();
   const requestedView = getRequestedViewFromHash();
 
@@ -464,71 +462,6 @@ function bindEvents() {
     event.preventDefault();
     event.returnValue = "";
   });
-}
-
-async function requestPublicSupabase(table, query) {
-  const url = new URL(table, SUPABASE_REST_URL);
-  Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, value));
-  const response = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-    },
-  });
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
-}
-
-async function loadPublicRestaurantIdentity() {
-  try {
-    const restaurants = await requestPublicSupabase("restaurants", {
-      select: "id,slug,name,city,is_active",
-      slug: `eq.${getRestaurantSlug()}`,
-      is_active: "eq.true",
-      limit: "1",
-    });
-    if (restaurants[0]) {
-      state.restaurant = { ...state.restaurant, ...restaurants[0] };
-      syncRestaurantIdentity();
-    }
-  } catch (error) {
-    console.warn("Public restaurant load failed:", error);
-    syncRestaurantIdentity();
-  }
-}
-
-async function loadDevAdminData() {
-  try {
-    const restaurants = await requestPublicSupabase("restaurants", {
-      select: "*",
-      slug: `eq.${getRestaurantSlug()}`,
-      is_active: "eq.true",
-      limit: "1",
-    });
-    const restaurant = restaurants[0];
-    if (!restaurant) {
-      renderAll();
-      return;
-    }
-
-    const [categories, items] = await Promise.all([
-      requestPublicSupabase("menu_categories", {
-        select: "*",
-        restaurant_id: `eq.${restaurant.id}`,
-        order: "sort_order.asc",
-      }),
-      requestPublicSupabase("menu_items", {
-        select: "*",
-        restaurant_id: `eq.${restaurant.id}`,
-        order: "sort_order.asc",
-      }),
-    ]);
-
-    applyAdminData({ restaurant, categories, items });
-  } catch (error) {
-    console.warn("[exort-admin] dev data load failed", error);
-    renderAll();
-  }
 }
 
 async function adminApi(action, payload = {}) {
