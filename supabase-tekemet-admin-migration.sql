@@ -14,6 +14,10 @@ create table if not exists public.restaurants (
   updated_at timestamptz not null default now()
 );
 
+insert into public.restaurants (slug, name, city, timezone, is_active)
+values ('tekemet-qonaev', 'Tekemet Qonaev', 'Qonaev', 'Asia/Almaty', true)
+on conflict (slug) do update set name = excluded.name, city = excluded.city, timezone = excluded.timezone, is_active = excluded.is_active;
+
 create table if not exists public.menu_categories (
   id uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references public.restaurants(id) on delete cascade,
@@ -66,8 +70,114 @@ create table if not exists public.menu_items (
 
 do $$
 declare
+  default_restaurant_id uuid;
+  category_id_type text;
+begin
+  select id into default_restaurant_id
+  from public.restaurants
+  where slug = 'tekemet-qonaev'
+  limit 1;
+
+  select format_type(attribute.atttypid, attribute.atttypmod)
+    into category_id_type
+  from pg_attribute attribute
+  where attribute.attrelid = 'public.menu_categories'::regclass
+    and attribute.attname = 'id'
+    and not attribute.attisdropped;
+
+  alter table public.menu_categories add column if not exists restaurant_id uuid;
+  alter table public.menu_categories add column if not exists name_ru text;
+  alter table public.menu_categories add column if not exists name_kz text;
+  alter table public.menu_categories add column if not exists name_en text;
+  alter table public.menu_categories add column if not exists title_ru text;
+  alter table public.menu_categories add column if not exists title_kk text;
+  alter table public.menu_categories add column if not exists title_en text;
+  alter table public.menu_categories add column if not exists sort_order int not null default 0;
+  alter table public.menu_categories add column if not exists is_active boolean not null default true;
+  alter table public.menu_categories add column if not exists created_at timestamptz not null default now();
+  alter table public.menu_categories add column if not exists updated_at timestamptz not null default now();
+
+  update public.menu_categories
+    set restaurant_id = default_restaurant_id
+    where restaurant_id is null;
+
+  update public.menu_categories
+    set name_ru = coalesce(name_ru, title_ru, title_kk, title_en, 'Раздел')
+    where name_ru is null;
+
+  alter table public.menu_items add column if not exists restaurant_id uuid;
+  if category_id_type is not null then
+    execute format('alter table public.menu_items add column if not exists category_id %s', category_id_type);
+  end if;
+  alter table public.menu_items add column if not exists content_key text;
+  alter table public.menu_items add column if not exists name_ru text;
+  alter table public.menu_items add column if not exists name_kz text;
+  alter table public.menu_items add column if not exists name_en text;
+  alter table public.menu_items add column if not exists title_ru text;
+  alter table public.menu_items add column if not exists title_kk text;
+  alter table public.menu_items add column if not exists title_en text;
+  alter table public.menu_items add column if not exists description_ru text;
+  alter table public.menu_items add column if not exists description_kz text;
+  alter table public.menu_items add column if not exists description_kk text;
+  alter table public.menu_items add column if not exists description_en text;
+  alter table public.menu_items add column if not exists price int not null default 0;
+  alter table public.menu_items add column if not exists old_price int;
+  alter table public.menu_items add column if not exists weight text;
+  alter table public.menu_items add column if not exists portion text;
+  alter table public.menu_items add column if not exists calories int;
+  alter table public.menu_items add column if not exists spice_level text;
+  alter table public.menu_items add column if not exists currency text not null default 'KZT';
+  alter table public.menu_items add column if not exists image_url text;
+  alter table public.menu_items add column if not exists image_path text;
+  alter table public.menu_items add column if not exists is_active boolean not null default true;
+  alter table public.menu_items add column if not exists is_stoplisted boolean not null default false;
+  alter table public.menu_items add column if not exists inactive_until timestamptz;
+  alter table public.menu_items add column if not exists sort_order int not null default 0;
+  alter table public.menu_items add column if not exists tags jsonb not null default '[]'::jsonb;
+  alter table public.menu_items add column if not exists allergens jsonb not null default '[]'::jsonb;
+  alter table public.menu_items add column if not exists version int not null default 1;
+  alter table public.menu_items add column if not exists created_at timestamptz not null default now();
+  alter table public.menu_items add column if not exists updated_at timestamptz not null default now();
+
+  update public.menu_items
+    set restaurant_id = default_restaurant_id
+    where restaurant_id is null;
+
+  update public.menu_items
+    set name_ru = coalesce(name_ru, title_ru, title_kk, title_en, 'Блюдо')
+    where name_ru is null;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'menu_categories_restaurant_id_fkey'
+      and conrelid = 'public.menu_categories'::regclass
+  ) then
+    alter table public.menu_categories
+      add constraint menu_categories_restaurant_id_fkey
+      foreign key (restaurant_id) references public.restaurants(id) on delete cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'menu_items_restaurant_id_fkey'
+      and conrelid = 'public.menu_items'::regclass
+  ) then
+    alter table public.menu_items
+      add constraint menu_items_restaurant_id_fkey
+      foreign key (restaurant_id) references public.restaurants(id) on delete cascade;
+  end if;
+end $$;
+
+do $$
+declare
+  default_restaurant_id uuid;
   menu_item_id_type text;
 begin
+  select id into default_restaurant_id
+  from public.restaurants
+  where slug = 'tekemet-qonaev'
+  limit 1;
+
   select format_type(attribute.atttypid, attribute.atttypmod)
     into menu_item_id_type
   from pg_attribute attribute
@@ -95,6 +205,30 @@ begin
       constraint menu_analytics_device_type_check check (device_type is null or device_type in ('mobile', 'tablet', 'desktop'))
     )
   $create_table$, menu_item_id_type);
+
+  alter table public.menu_analytics_events add column if not exists restaurant_id uuid;
+  alter table public.menu_analytics_events add column if not exists event_type text;
+  execute format('alter table public.menu_analytics_events add column if not exists menu_item_id %s', menu_item_id_type);
+  alter table public.menu_analytics_events add column if not exists language text;
+  alter table public.menu_analytics_events add column if not exists device_type text;
+  alter table public.menu_analytics_events add column if not exists session_id text;
+  alter table public.menu_analytics_events add column if not exists user_agent text;
+  alter table public.menu_analytics_events add column if not exists referrer text;
+  alter table public.menu_analytics_events add column if not exists created_at timestamptz not null default now();
+
+  update public.menu_analytics_events
+    set restaurant_id = default_restaurant_id
+    where restaurant_id is null;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'menu_analytics_events_restaurant_id_fkey'
+      and conrelid = 'public.menu_analytics_events'::regclass
+  ) then
+    alter table public.menu_analytics_events
+      add constraint menu_analytics_events_restaurant_id_fkey
+      foreign key (restaurant_id) references public.restaurants(id) on delete cascade;
+  end if;
 end $$;
 
 create or replace function public.set_updated_at() returns trigger language plpgsql as $$
@@ -136,10 +270,10 @@ drop policy if exists restaurants_public_select_active on public.restaurants;
 create policy restaurants_public_select_active on public.restaurants for select using (is_active = true);
 
 drop policy if exists menu_categories_public_select_active on public.menu_categories;
-create policy menu_categories_public_select_active on public.menu_categories for select using (is_active = true and exists (select 1 from public.restaurants r where r.id = restaurant_id and r.is_active = true));
+create policy menu_categories_public_select_active on public.menu_categories for select using (is_active = true and exists (select 1 from public.restaurants r where r.id = menu_categories.restaurant_id and r.is_active = true));
 
 drop policy if exists menu_items_public_select_active on public.menu_items;
-create policy menu_items_public_select_active on public.menu_items for select using (is_active = true and exists (select 1 from public.restaurants r where r.id = restaurant_id and r.is_active = true));
+create policy menu_items_public_select_active on public.menu_items for select using (is_active = true and exists (select 1 from public.restaurants r where r.id = menu_items.restaurant_id and r.is_active = true));
 
 insert into public.restaurants (slug, name, city, timezone, is_active)
 values ('tekemet-qonaev', 'Tekemet Qonaev', 'Qonaev', 'Asia/Almaty', true)
