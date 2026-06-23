@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f8fb" />
+    <script>
+      (() => {
+        try {
+          document.documentElement.dataset.theme = localStorage.getItem("tekemet_admin_theme") || "light";
+        } catch {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
+    <title>Exort Admin | Tekemet Qonaev</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/tekemet-admin.css?v=1" />
+    <link rel="stylesheet" href="css/tekemet-admin-navigation.css?v=1" />
+    <script defer src="js/tekemet-admin-api.js?v=2"></script>
+    <script defer src="js/tekemet-admin.js?v=2"></script>
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+      <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M16 3v7a3 3 0 0 0 3 3h1"/><path d="M20 3v18"/><path d="M8 3v18"/><path d="M4 3v5a4 4 0 0 0 8 0V3"/></symbol>
+      <symbol id="icon-categories" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+      <symbol id="icon-stop" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m6.4 6.4 11.2 11.2"/></symbol>
+      <symbol id="icon-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4.5-4.5L6 20"/></symbol>
+      <symbol id="icon-analytics" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-7"/><path d="M20 16v-3"/></symbol>
+      <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></symbol>
+      <symbol id="icon-support" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H9l-5 3v-7a9 9 0 1 1 17 0Z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></symbol>
+      <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 8l4 4-4 4M18 12H9"/></symbol>
+    </svg>
+
+    <section class="login-screen" data-login-screen>
+      <div class="login-orb login-orb--one"></div>
+      <div class="login-orb login-orb--two"></div>
+      <div class="login-card">
+        <div class="login-brand"><span>E</span><strong>Exort Admin</strong></div>
+        <div class="restaurant-identity">
+          <div class="restaurant-avatar" data-restaurant-initial>E</div>
+          <div><strong data-restaurant-name>Tekemet Qonaev</strong><span><i></i> Система Exort подключена</span></div>
+        </div>
+        <div class="login-copy">
+          <p class="kicker">Безопасный доступ</p>
+          <h1>Вход в административную панель</h1>
+          <p>Введите PIN ресторана, чтобы управлять меню.</p>
+        </div>
+        <form class="pin-form" data-pin-form>
+          <label for="pin">PIN / пароль</label>
+          <div class="pin-field">
+            <input id="pin" data-pin-input type="password" inputmode="numeric" autocomplete="current-password" maxlength="12" placeholder="Введите PIN" required />
+            <button type="button" data-pin-visibility aria-label="Показать PIN">Показать</button>
+          </div>
+          <p class="form-error" data-login-error aria-live="polite"></p>
+          <button class="primary-button" type="submit"><span data-login-label>Войти</span></button>
+        </form>
+        <p class="support-note">Если забыли PIN — обратитесь в поддержку Exort.</p>
+      </div>
+    </section>
+
+    <div class="app-shell" data-app-shell hidden>
+      <aside class="sidebar">
+        <div class="sidebar-product"><span class="exort-mark">E</span><strong>Exort</strong><small>Control Panel</small></div>
+        <div class="side-restaurant sidebar-restaurant">
+          <div class="restaurant-avatar" data-restaurant-initial>E</div>
+          <div><strong data-restaurant-name>Tekemet Qonaev</strong><span><i></i> Меню опубликовано</span></div>
+        </div>
+        <nav class="side-nav" aria-label="Разделы панели">
+          <p>Управление</p>
+          <button class="is-active" type="button" data-nav="overview"><svg><use href="#icon-dashboard"/></svg><span>Обзор</span></button>
+          <button type="button" data-nav="menu"><svg><use href="#icon-menu"/></svg><span>Меню</span></button>
+          <button type="button" data-nav="categories"><svg><use href="#icon-categories"/></svg><span>Категории</span></button>
+          <button type="button" data-nav="stoplist"><svg><use href="#icon-stop"/></svg><span>Стоп-лист</span></button>
+          <button type="button" data-nav="analytics"><svg><use href="#icon-analytics"/></svg><span>Аналитика</span></button>
+        </nav>
+        <div class="side-footer">
+          <a data-menu-link href="menu-ru.html" target="_blank" rel="noreferrer"><svg><use href="#icon-external"/></svg><span>Открыть меню</span></a>
+          <a href="https://wa.me/77072025888" target="_blank" rel="noreferrer"><svg><use href="#icon-support"/></svg><span>Поддержка Exort</span></a>
+          <button type="button" data-logout><svg><use href="#icon-logout"/></svg><span>Выйти</span></button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="kicker" data-view-kicker>Рабочее пространство</p>
+            <h1 data-view-title>Обзор</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="connection-status"><i></i><span>Меню онлайн</span></span>
+            <a class="secondary-button compact" data-menu-link href="menu-ru.html" target="_blank" rel="noreferrer">Открыть меню</a>
+            <button class="icon-button" type="button" data-logout aria-label="Выйти">↗</button>
+          </div>
+        </header>
+
+        <section class="view is-active" data-view="overview">
+          <div class="metric-grid" data-metrics></div>
+          <div class="overview-grid">
+            <article class="panel">
+              <div class="panel-heading"><div><p class="kicker">Быстрый старт</p><h2>Действия</h2></div></div>
+              <div class="quick-actions">
+                <button type="button" data-action="add-item"><span>+</span><strong>Добавить блюдо</strong><small>Название, цена и фото</small></button>
+                <button type="button" data-action="add-category"><span>+</span><strong>Добавить категорию</strong><small>Новый раздел меню</small></button>
+                <a data-menu-link href="menu-ru.html" target="_blank" rel="noreferrer"><span>↗</span><strong>Открыть демо меню</strong><small>Посмотреть глазами гостя</small></a>
+              </div>
+            </article>
+            <article class="panel attention-panel">
+              <div class="panel-heading"><div><p class="kicker">Контроль качества</p><h2>Требует внимания</h2></div><span data-attention-count></span></div>
+              <div class="attention-list" data-attention-list></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="menu">
+          <div class="menu-toolbar">
+            <label class="search-control"><span>⌕</span><input type="search" data-menu-search placeholder="Найти блюдо" /></label>
+            <select data-category-filter aria-label="Фильтр категорий"></select>
+            <select data-status-filter aria-label="Фильтр статуса">
+              <option value="all">Все статусы</option>
+              <option value="active">В продаже</option>
+              <option value="stop">Стоп-лист</option>
+              <option value="temporary">Временно недоступные</option>
+              <option value="inactive">Неактивные</option>
+            </select>
+            <button class="primary-button compact" type="button" data-action="add-item">Добавить блюдо</button>
+          </div>
+          <div class="dish-grid" data-dish-grid></div>
+        </section>
+
+        <section class="view" data-view="categories">
+          <div class="section-toolbar"><p>Управляйте порядком и видимостью категорий.</p><button class="primary-button compact" type="button" data-action="add-category">Добавить категорию</button></div>
+          <div class="category-list" data-category-list></div>
+        </section>
+
+        <section class="view" data-view="stoplist">
+          <div class="section-toolbar"><p>Меняйте доступность блюда за одно действие.</p><span class="autosave-status">Изменения сохраняются автоматически</span></div>
+          <div class="stop-list" data-stop-list></div>
+        </section>
+
+        <section class="view" data-view="analytics">
+          <div class="analytics-page" data-analytics-root>
+            <div class="analytics-summary-grid">
+              <article class="analytics-metric-card">
+                <span>Посещения меню</span>
+                <strong>Данных пока нет</strong>
+                <small>Появится после подключения статистики</small>
+              </article>
+              <article class="analytics-metric-card">
+                <span>Уникальные гости</span>
+                <strong>Данных пока нет</strong>
+                <small>Будет считаться по открытиям меню</small>
+              </article>
+              <article class="analytics-metric-card">
+                <span>Открытия блюд</span>
+                <strong>Данных пока нет</strong>
+                <small>Появится после первых открытий карточек</small>
+              </article>
+              <article class="analytics-metric-card">
+                <span>Среднее время просмотра</span>
+                <strong>Данных пока нет</strong>
+                <small>Будет доступно после сбора статистики</small>
+              </article>
+            </div>
+
+            <div class="analytics-main-grid">
+              <article class="analytics-card analytics-card--wide">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Интерес гостей</p><h2>Популярные блюда</h2></div>
+                </div>
+                <div class="analytics-empty">
+                  <strong>События появятся после первых открытий карточек</strong>
+                  <p>Здесь будет рейтинг блюд по количеству просмотров.</p>
+                </div>
+                <div class="analytics-list-skeleton" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </div>
+              </article>
+
+              <article class="analytics-card analytics-card--wide">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Активность</p><h2>Посещения по времени</h2></div>
+                </div>
+                <div class="analytics-chart-shell">
+                  <div class="analytics-chart-grid" aria-hidden="true">
+                    <span></span><span></span><span></span><span></span><span></span>
+                  </div>
+                  <div class="analytics-time-axis" aria-hidden="true">
+                    <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+                  </div>
+                  <p>График появится после сбора статистики</p>
+                </div>
+              </article>
+            </div>
+
+            <div class="analytics-secondary-grid">
+              <article class="analytics-card">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Языки</p><h2>Языки гостей</h2></div>
+                </div>
+                <div class="analytics-option-list">
+                  <span>RU</span><span>KZ</span><span>EN</span>
+                </div>
+                <p class="analytics-muted">Пока нет данных</p>
+              </article>
+
+              <article class="analytics-card">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Устройства</p><h2>Устройства гостей</h2></div>
+                </div>
+                <div class="analytics-option-list">
+                  <span>Телефон</span><span>Планшет</span><span>Компьютер</span>
+                </div>
+                <p class="analytics-muted">Пока нет данных</p>
+              </article>
+
+              <article class="analytics-card">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Лента</p><h2>Последние действия</h2></div>
+                </div>
+                <div class="analytics-empty analytics-empty--compact">
+                  <strong>Действий пока нет</strong>
+                  <p>Список появится после подключения событий меню.</p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <nav class="mobile-nav" aria-label="Мобильная навигация">
+        <button class="is-active" type="button" data-nav="overview" aria-label="Обзор"><svg><use href="#icon-dashboard"/></svg><span>Обзор</span></button>
+        <button type="button" data-nav="menu" aria-label="Меню"><svg><use href="#icon-menu"/></svg><span>Меню</span></button>
+        <button type="button" data-nav="stoplist" aria-label="Стоп-лист"><svg><use href="#icon-stop"/></svg><span>Стоп</span></button>
+        <button type="button" data-nav="analytics" aria-label="Аналитика"><svg><use href="#icon-analytics"/></svg><span>Аналитика</span></button>
+        <button type="button" data-nav="categories" aria-label="Категории"><svg><use href="#icon-categories"/></svg><span>Категории</span></button>
+      </nav>
+    </div>
+
+    <aside class="drawer" data-drawer aria-hidden="true">
+      <button class="drawer-backdrop" type="button" data-close-drawer aria-label="Закрыть"></button>
+      <form class="drawer-panel" data-item-form>
+        <header><div><p class="kicker">Карточка блюда</p><h2 data-drawer-title>Новое блюдо</h2></div><button type="button" data-close-drawer aria-label="Закрыть">×</button></header>
+        <div class="drawer-body">
+          <input type="hidden" name="id" />
+          <input type="hidden" name="sort_order" />
+          <div class="editor-layout">
+            <button class="secondary-button compact preview-toggle" type="button" data-toggle-preview>Показать превью</button>
+
+            <div class="editor-side-column">
+              <aside class="dish-live-preview" data-dish-preview aria-label="Предпросмотр блюда"></aside>
+              <div class="editor-photo-preview" data-editor-image hidden></div>
+              <div class="editor-photo-actions">
+                <label class="secondary-button compact">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" data-editor-file />
+                  <span data-editor-file-label>Загрузить фото</span>
+                </label>
+                <button class="secondary-button compact editor-photo-remove" type="button" data-remove-editor-image hidden>Удалить фото</button>
+                <small>Фото будет оптимизировано перед загрузкой.</small>
+              </div>
+            </div>
+
+            <div class="editor-form-column">
+              <section class="field-group content-editor">
+                <div class="drawer-section-heading">
+                  <span>Контент блюда</span>
+                </div>
+                <div class="language-tabs mobile-editor-language-tabs">
+                  <button class="is-active" type="button" data-lang-tab="ru">RU</button>
+                  <button type="button" data-lang-tab="kz">KZ</button>
+                  <button type="button" data-lang-tab="en">EN</button>
+                </div>
+                <div class="content-language-fields">
+                  <label data-mobile-lang-field="ru">Название RU<input name="name_ru" required /></label>
+                  <label data-mobile-lang-field="ru">Описание RU<textarea name="description_ru" rows="4" placeholder="Красочное описание блюда или перечень ингредиентов"></textarea></label>
+                  <label data-mobile-lang-field="kz">Название KZ<input name="name_kz" /></label>
+                  <label data-mobile-lang-field="kz">Описание KZ<textarea name="description_kz" rows="4" placeholder="Тағамның сипаттамасы немесе ингредиенттер тізімі"></textarea></label>
+                  <label data-mobile-lang-field="en">Название EN<input name="name_en" /></label>
+                  <label data-mobile-lang-field="en">Описание EN<textarea name="description_en" rows="4" placeholder="Dish description or ingredient list"></textarea></label>
+                </div>
+              </section>
+
+              <section class="field-group sales-editor">
+                <div class="drawer-section-heading">
+                  <span>Продажи</span>
+                  <strong class="editor-status-badge is-sale" data-editor-status-badge>В продаже</strong>
+                </div>
+                <div class="dual-field-grid">
+                  <label>Цена<input name="price" type="number" min="0" required /></label>
+                  <label>Категория<select name="category_id" required></select></label>
+                </div>
+                <div class="sales-status-row">
+                  <div class="status-segment" data-status-segment>
+                    <label data-status-choice>
+                      <input type="radio" name="is_stoplisted" value="false" checked />
+                      <span>В продаже</span>
+                    </label>
+                    <label data-status-choice>
+                      <input type="radio" name="is_stoplisted" value="true" />
+                      <span>На стопе</span>
+                    </label>
+                  </div>
+                  <label class="auto-translate-toggle auto-translate-toggle--plain">
+                    <input type="checkbox" data-auto-translate-toggle checked />
+                    <span>Автоперевод</span>
+                  </label>
+                  <span class="translate-status" data-translate-status hidden>Автоперевод включен</span>
+                  <button class="secondary-button compact" type="button" data-translate-current-item hidden>Перевести с RU</button>
+                </div>
+              </section>
+
+              <details class="drawer-accordion" data-extra-details>
+                <summary>Дополнительная информация</summary>
+                <div class="accordion-body">
+                  <div class="dual-field-grid">
+                    <label>Старая цена<input name="old_price" type="number" min="0" step="1" inputmode="numeric" /></label>
+                    <label>Вес / порция<input name="weight" type="text" maxlength="40" /></label>
+                    <label>Калории<input name="calories" type="number" min="0" step="1" inputmode="numeric" /></label>
+                    <label>Острота<select name="spice_level">
+                      <option value="">Не указана</option>
+                      <option value="mild">Легкая</option>
+                      <option value="medium">Средняя</option>
+                      <option value="hot">Острая</option>
+                    </select></label>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+        <footer><button class="danger-button" type="button" data-delete-item hidden>Удалить</button><div><button class="secondary-button compact" type="button" data-close-drawer>Отмена</button><button class="primary-button compact" type="submit">Сохранить</button></div></footer>
+      </form>
+    </aside>
+
+    <dialog class="confirm-dialog category-dialog" data-category-dialog>
+      <form class="settings-form" data-category-form>
+        <input type="hidden" name="id" />
+        <p class="kicker">Структура меню</p>
+        <h2 data-category-dialog-title>Новая категория</h2>
+        <label>Название категории<input name="name" maxlength="80" autocomplete="off" required /></label>
+        <div><button type="button" class="secondary-button compact" data-close-category>Отмена</button><button type="submit" class="primary-button compact">Сохранить</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="confirm-dialog" data-confirm-dialog><form method="dialog"><h2 data-confirm-title>Подтвердите действие</h2><p data-confirm-text></p><div><button value="cancel" class="secondary-button compact">Отмена</button><button value="confirm" class="danger-button">Подтвердить</button></div></form></dialog>
+    <div class="toast-stack" data-toast-stack aria-live="polite"></div>
+  </body>
+</html>

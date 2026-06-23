@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEKEMET RESTO-HOTEL | Qonaev</title>
+    <meta name="description" content="TEKEMET RESTO-HOTEL в Конаеве: пятизвездочный отель, ресторан казахской кухни, комфортные номера и отдых для всей семьи.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="TEKEMET RESTO-HOTEL">
+    <meta property="og:title" content="TEKEMET RESTO-HOTEL | Qonaev">
+    <meta property="og:description" content="Пятизвездочный отель и ресторан казахской кухни в городе Конаев.">
+    <meta property="og:image" content="images/hero-bg.webp">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TEKEMET RESTO-HOTEL | Qonaev">
+    <meta name="twitter:description" content="Пятизвездочный отель и ресторан казахской кухни в городе Конаев.">
+    <meta name="twitter:image" content="images/hero-bg.webp">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=20260501">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="header" id="header">
+        <div class="header__inner">
+            <a href="#" class="header__logo">
+                <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Diamond shape -->
+                    <rect x="29.3" y="29.3" width="141.4" height="141.4" rx="4" transform="rotate(45 100 100)" fill="#94C1CA"/>
+                    <!-- Top ornament -->
+                    <g fill="#F3E7CE">
+                        <path d="M100 28 L108 40 L100 36 L92 40 Z"/>
+                        <path d="M82 42 C88 38, 94 44, 100 40 C106 44, 112 38, 118 42" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <ellipse cx="100" cy="48" rx="12" ry="3"/>
+                        <circle cx="86" cy="46" r="2"/>
+                        <circle cx="114" cy="46" r="2"/>
+                        <path d="M76 52 Q88 48, 100 54 Q112 48, 124 52" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                    </g>
+                    <!-- Main text -->
+                    <text x="100" y="102" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="400" letter-spacing="4" fill="#F3E7CE">TEKEMET</text>
+                    <!-- Subtitle -->
+                    <text x="100" y="122" text-anchor="middle" font-family="Georgia, serif" font-size="10" font-weight="400" letter-spacing="5" fill="#F3E7CE">QONAQ UYI</text>
+                    <!-- Bottom ornament -->
+                    <g fill="#F3E7CE">
+                        <path d="M76 148 Q88 152, 100 146 Q112 152, 124 148" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                        <ellipse cx="100" cy="152" rx="12" ry="3"/>
+                        <circle cx="86" cy="154" r="2"/>
+                        <circle cx="114" cy="154" r="2"/>
+                        <path d="M82 158 C88 162, 94 156, 100 160 C106 156, 112 162, 118 158" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <path d="M100 172 L108 160 L100 164 L92 160 Z"/>
+                    </g>
+                </svg>
+            </a>
+            <nav class="header__nav">
+                <a href="#about">О нас</a>
+                <a href="#rooms">Номера</a>
+                <a href="#restaurant">Ресторан</a>
+                <a href="#nearby">Рядом</a>
+                <a href="#contacts">Контакты</a>
+            </nav>
+            <div class="header__lang">
+                <a href="index.html">KZ</a>
+                <a href="ru.html" class="active">RU</a>
+                <a href="en.html">EN</a>
+            </div>
+            <!-- Mobile language buttons (visible only on mobile) -->
+            <div class="mobile-lang">
+                <a href="index.html">KZ</a>
+                <a href="ru.html" class="active">RU</a>
+                <a href="en.html">EN</a>
+            </div>
+            <div class="header__controls">
+                <button class="theme-toggle" id="themeToggle" title="Переключить тему">
+                    <span class="toggle-icon sun" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <path d="M12 1v2" />
+                            <path d="M12 21v2" />
+                            <path d="M4.22 4.22l1.42 1.42" />
+                            <path d="M18.36 18.36l1.42 1.42" />
+                            <path d="M1 12h2" />
+                            <path d="M21 12h2" />
+                            <path d="M4.22 19.78l1.42-1.42" />
+                            <path d="M18.36 5.64l1.42-1.42" />
+                        </svg>
+                    </span>
+                    <span class="toggle-icon moon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 0111.21 3 7 7 0 0012 21a9 9 0 009-8.21z" />
+                        </svg>
+                    </span>
+                    <span class="toggle-slider"></span>
+                </button>
+            </div>
+            <button class="header__burger" id="burger">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero" id="hero">
+        <div class="hero__overlay"></div>
+        <div class="hero__content">
+            <p class="hero__subtitle animate-fade-up">Добро пожаловать</p>
+            <h1 class="hero__title animate-fade-up delay-1">TEKEMET</h1>
+            <h2 class="hero__title-sub animate-fade-up delay-2">RESTO-HOTEL</h2>
+            <div class="hero__stars animate-fade-up delay-2">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+            <div class="hero__buttons animate-fade-up delay-3">
+                <a href="#about" class="btn btn--primary">Подробнее</a>
+                <a href="menu-ru.html" class="btn btn--outline">Меню</a>
+            </div>
+        </div>
+        <div class="hero__scroll">
+            <span>&#8595;</span>
+        </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="about" id="about">
+        <div class="container">
+            <div class="about__grid">
+                <div class="about__image">
+                    <img src="images/about__image.jpg" alt="Фото отеля">
+                </div>
+                <div class="about__text">
+                    <p class="section-label">О нас</p>
+                    <h2 class="section-title">Пятизвёздочный опыт<br>гостеприимства</h2>
+                    <p class="about__desc">
+                        TEKEMET RESTO-HOTEL — это уникальное сочетание премиального гостиничного сервиса и аутентичной казахской кухни на высшем уровне. Расположенный в самом сердце города Конаев, наш отель воплощает в себе лучшие традиции казахского гостеприимства, дополненные современным комфортом.
+                    </p>
+                    <p class="about__desc">
+                        Каждая деталь — от интерьеров до блюд нашего ресторана — продумана с заботой о наших гостях. Мы создали место, где история и культура Казахстана переплетаются с высокими международными стандартами сервиса.
+                    </p>
+                    <div class="about__features">
+                        <div class="about__feature">
+                            <span class="about__feature-num">5&#9733;</span>
+                            <span>Уровень сервиса</span>
+                        </div>
+                        <div class="about__feature">
+                            <span class="about__feature-num">24/7</span>
+                            <span>Ресепшн</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROOMS -->
+    <!-- Все номера рендерятся из Supabase через content-sync.js -->
+    <section class="rooms" id="rooms">
+        <div class="container">
+            <p class="section-label center">Размещение</p>
+            <h2 class="section-title center">Наши номера</h2>
+            <p class="rooms__hint center">Листайте, чтобы увидеть больше номеров</p>
+            <div class="rooms__carousel-wrap">
+                <div class="rooms__carousel">
+                    <div class="room-card" data-content-key="static-standard">
+                        <div class="room-card__image">
+                            <img src="images/Standart card img.jpeg" alt="Стандарт" loading="lazy" decoding="async">
+                            <span class="room-card__badge">СТАНДАРТ</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Стандарт</h3>
+                            <p>Уютный номер для комфортного размещения двух гостей.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-standard-plus">
+                        <div class="room-card__image">
+                            <img src="images/Standart plus img.jpg" alt="Стандарт плюс" loading="lazy" decoding="async">
+                            <span class="room-card__badge">СТАНДАРТ ПЛЮС</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Стандарт плюс</h3>
+                            <p>Более просторный номер по сравнению со стандартом, идеально подходящий для комфортного размещения двух гостей.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-twin">
+                        <div class="room-card__image">
+                            <img src="images/Standart_twinimg.jpeg" alt="Стандарт твин" loading="lazy" decoding="async">
+                            <span class="room-card__badge">СТАНДАРТ ТВИН</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Стандарт твин</h3>
+                            <p>Номер с двумя раздельными кроватями, созданный для удобного и спокойного отдыха.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-junior-suite">
+                        <div class="room-card__image">
+                            <img src="images/juniorsuit_img.jpeg" alt="Полулюкс" loading="lazy" decoding="async">
+                            <span class="room-card__badge">ПОЛУЛЮКС</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Полулюкс</h3>
+                            <p>Просторный и элегантный номер повышенного комфорта, идеально подходящий для размещения до трех гостей.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности премиум-класса</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="rooms__nav">
+                    <button class="rooms__arrow rooms__arrow--left" id="prevRoom">&#8592;</button>
+                    <button class="rooms__arrow rooms__arrow--right" id="nextRoom">&#8594;</button>
+                </div>
+            </div>
+            <div class="rooms__notes">
+                <p class="rooms__warning"><strong>Курение в номерах строго запрещено!</strong></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESTAURANT -->
+    <section class="restaurant" id="restaurant">
+        <div class="restaurant__bg"></div>
+        <div class="container">
+            <div class="restaurant__grid">
+                <div class="restaurant__text">
+                    <p class="section-label light">Гастрономия</p>
+                    <h2 class="section-title light">Казахская кухня<br>на высшем уровне</h2>
+                    <img src="images/restaurant__image.jpg" alt="Ресторан Tekemet" class="restaurant__image-mobile">
+                    <p class="restaurant__desc">
+                        Наш ресторан — это гастрономическое путешествие по богатейшим традициям казахской кухни. Мы предлагаем эксклюзивные блюда, приготовленные по аутентичным рецептам с использованием лучших местных ингредиентов.
+                    </p>
+                    <p class="restaurant__desc">
+                        В меню вы найдёте широкое разнообразие бешбармака — от классического до авторских интерпретаций, нежнейший куырдак, ароматный казы, баурсаки и десятки других блюд, каждое из которых рассказывает свою историю.
+                    </p>
+                    <p class="restaurant__desc">
+                        Наши салаты и основные блюда ориентированы на казахские традиции. Это не просто еда — это культурный опыт.
+                    </p>
+                    <div class="restaurant__highlights">
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>Банкеты 50-60 гостей</strong>
+                                <p>Организуем банкеты и торжества в уютной атмосфере с полным сопровождением мероприятия.</p>
+                            </div>
+                        </div>
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>VIP-комната до 20 гостей</strong>
+                                <p>Отдельное пространство для приватных встреч, семейных ужинов и особых мероприятий.</p>
+                            </div>
+                        </div>
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>Блюда на компанию</strong>
+                                <p>В меню представлены сытные блюда для компании, идеально подходящие для совместных обедов и праздников.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="menu-ru.html" class="btn btn--gold" id="menu">Смотреть меню</a>
+                </div>
+                <div class="restaurant__images">
+                    <img src="images/restaurant__image.jpg" alt="Ресторан Tekemet" class="restaurant__image tall">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- NEARBY -->
+    <section class="nearby" id="nearby">
+        <div class="container">
+            <p class="section-label center">Развлечения</p>
+            <h2 class="section-title center">Что рядом</h2>
+            <p class="nearby__subtitle">Откройте для себя лучшие места для отдыха и развлечений в шаговой доступности от отеля</p>
+            <div class="nearby__grid">
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◌</div>
+                    <h3>Konaev Aquapark</h3>
+                    <p>Аквапарк с бассейнами и водными аттракционами для семейного отдыха. Развлечения для детей и взрослых в любую погоду.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">⌂</div>
+                    <h3>Family Park</h3>
+                    <p>Семейный развлекательный центр с площадками и активностями для детей и подростков.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◎</div>
+                    <h3>ASP CLUB</h3>
+                    <p>Развлекательный комплекс на Песчаной косе: картинг, гоночная трасса, кибер-зона, караоке и зоны активности.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◍</div>
+                    <h3>ASP Arena</h3>
+                    <p>Музыкальная и развлекательная площадка для концертов, вечерних программ и живой атмосферы.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">✦</div>
+                    <h3>Qonaev Central Park</h3>
+                    <p>Центральный парк города с зелёными зонами и прогулочными пространствами для спокойного отдыха.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">✧</div>
+                    <h3>Kosmo</h3>
+                    <p>Зона отдыха для детей с современной тематикой и развлечениями для юных гостей.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">❋</div>
+                    <h3>Зона Отдыха</h3>
+                    <p>Детская зона на свежем воздухе с безопасными площадками для активного отдыха малышей.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">♡</div>
+                    <h3>ООИ «Камкор Журек»</h3>
+                    <p>Общественный центр с мероприятиями и культурными программами для разных возрастов.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MAP -->
+    <section class="map-section" id="contacts">
+        <div class="container">
+            <p class="section-label center">Расположение</p>
+            <h2 class="section-title center">Как нас найти</h2>
+            <div class="map__tabs">
+                <button class="map__tab active" data-map="2gis">2GIS</button>
+                <button class="map__tab" data-map="google">Google Maps</button>
+            </div>
+            <div class="map__wrapper">
+                <div class="map__placeholder" id="map2gis">
+                    <div class="map__fallback">
+                        <p class="map__fallback-label">2GIS</p>
+                        <h3>Конаев, мкр 5, 45</h3>
+                        <p>Прямая точка в 2GIS не отображается внутри iframe из-за ограничений сервиса. Откройте адрес по кнопке ниже.</p>
+                        <a href="https://2gis.kz/almaty/geo/70000001098045524" class="btn btn--small" target="_blank" rel="noopener noreferrer">Открыть точку в 2GIS</a>
+                    </div>
+                </div>
+                <div class="map__placeholder hidden" id="mapGoogle">
+                    <a href="https://maps.app.goo.gl/BtNqCHYwzs8GnmM9A" class="map__link" target="_blank" rel="noopener noreferrer" aria-label="Открыть адрес в Google Maps">
+                        <iframe src="https://www.google.com/maps?q=%D0%A2%D0%B5%D0%BA%D0%B5%D0%BC%D0%B5%D1%82%20%D0%BE%D1%82%D0%B5%D0%BB%D1%8C%20%D0%9A%D0%BE%D0%BD%D0%B0%D0%B5%D0%B2&z=18&output=embed" width="100%" height="450" frameborder="0" style="border:0; border-radius: 12px;" allowfullscreen loading="lazy"></iframe>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer__grid">
+                <div class="footer__brand">
+                    <h3 class="footer__logo">TEKEMET</h3>
+                    <p class="footer__tagline">RESTO-HOTEL</p>
+                    <p class="footer__desc">Пятизвёздочный отель и ресторан казахской кухни в городе Конаев.</p>
+                    <div class="footer__stars">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+                </div>
+                <div class="footer__col">
+                    <h4>Разделы</h4>
+                    <a href="#about">О нас</a>
+                    <a href="#rooms">Номера</a>
+                    <a href="#restaurant">Ресторан</a>
+                    <a href="#nearby">Рядом</a>
+                </div>
+                <div class="footer__col">
+                    <h4>Контакты</h4>
+                    <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20уточнить%20информацию%20по%20бронированию%20в%20TEKEMET%20RESTO-HOTEL." class="footer__phone-link" target="_blank" rel="noopener noreferrer" aria-label="Написать в WhatsApp">
+                        <span class="footer__icon-outline" aria-hidden="true">☎</span>
+                        <span>+7 707 202 5888</span>
+                    </a>
+                    <p>&#128231; <a href="mailto:tekemet2025@mail.ru">tekemet2025@mail.ru</a></p>
+                    <p>&#128205; Конаев, микрорайон 5, 45</p>
+                    <p><a href="privacy.html">Политика конфиденциальности</a></p>
+                </div>
+                <div class="footer__col">
+                    <h4>Часы работы</h4>
+                    <p>Ресепшн: 24/7</p>
+                    <p>Ресторан: 07:00 - 23:00</p>
+                    <p>Заезд: с 14:00</p>
+                    <p>Выезд: до 12:00</p>
+                </div>
+            </div>
+            <div class="footer__bottom"><p>&copy; 2026 Tekemet Qonaev. All rights reserved.</p></div>
+        </div>
+    </footer>
+
+    <script src="supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-client.js?v=20260501"></script>
+    <script src="content-sync.js?v=20260501"></script>
+    <script src="script.js?v=20260501"></script>
+
+</body>
+</html>

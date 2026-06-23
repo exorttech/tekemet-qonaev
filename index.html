@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEKEMET RESTO-HOTEL | Qonaev | KZ</title>
+    <meta name="description" content="TEKEMET RESTO-HOTEL, Qonaev: 5 жұлдызды қонақүй, қазақ асханасы, жайлы нөмірлер және отбасылық демалыс.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="kk_KZ">
+    <meta property="og:site_name" content="TEKEMET RESTO-HOTEL">
+    <meta property="og:title" content="TEKEMET RESTO-HOTEL | Qonaev | KZ">
+    <meta property="og:description" content="5 жұлдызды қонақүй, қазақ асханасы, жайлы нөмірлер және отбасылық демалыс.">
+    <meta property="og:image" content="images/hero-bg.webp">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TEKEMET RESTO-HOTEL | Qonaev | KZ">
+    <meta name="twitter:description" content="5 жұлдызды қонақүй, қазақ асханасы, жайлы нөмірлер және отбасылық демалыс.">
+    <meta name="twitter:image" content="images/hero-bg.webp">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=20260501">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="header" id="header">
+        <div class="header__inner">
+            <a href="#" class="header__logo">
+                <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Diamond shape -->
+                    <rect x="29.3" y="29.3" width="141.4" height="141.4" rx="4" transform="rotate(45 100 100)" fill="#94C1CA"/>
+                    <!-- Top ornament -->
+                    <g fill="#F3E7CE">
+                        <path d="M100 28 L108 40 L100 36 L92 40 Z"/>
+                        <path d="M82 42 C88 38, 94 44, 100 40 C106 44, 112 38, 118 42" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <ellipse cx="100" cy="48" rx="12" ry="3"/>
+                        <circle cx="86" cy="46" r="2"/>
+                        <circle cx="114" cy="46" r="2"/>
+                        <path d="M76 52 Q88 48, 100 54 Q112 48, 124 52" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                    </g>
+                    <!-- Main text -->
+                    <text x="100" y="102" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="400" letter-spacing="4" fill="#F3E7CE">TEKEMET</text>
+                    <!-- Subtitle -->
+                    <text x="100" y="122" text-anchor="middle" font-family="Georgia, serif" font-size="10" font-weight="400" letter-spacing="5" fill="#F3E7CE">QONAQ UYI</text>
+                    <!-- Bottom ornament -->
+                    <g fill="#F3E7CE">
+                        <path d="M76 148 Q88 152, 100 146 Q112 152, 124 148" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                        <ellipse cx="100" cy="152" rx="12" ry="3"/>
+                        <circle cx="86" cy="154" r="2"/>
+                        <circle cx="114" cy="154" r="2"/>
+                        <path d="M82 158 C88 162, 94 156, 100 160 C106 156, 112 162, 118 158" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <path d="M100 172 L108 160 L100 164 L92 160 Z"/>
+                    </g>
+                </svg>
+            </a>
+            <nav class="header__nav">
+                <a href="#about">Біз туралы</a>
+                <a href="#rooms">Нөмірлер</a>
+                <a href="#restaurant">Мейрамхана</a>
+                <a href="#nearby">Жақын жерде</a>
+                <a href="#contacts">Байланыс</a>
+            </nav>
+            <div class="header__lang">
+                <a href="index.html" class="active">KZ</a>
+                <a href="ru.html">RU</a>
+                <a href="en.html">EN</a>
+            </div>
+            <!-- Mobile language buttons (visible only on mobile) -->
+            <div class="mobile-lang">
+                <a href="index.html" class="active">KZ</a>
+                <a href="ru.html">RU</a>
+                <a href="en.html">EN</a>
+            </div>
+            <div class="header__controls">
+                <button class="theme-toggle" id="themeToggle" title="Тақырыпты ауыстыру">
+                    <span class="toggle-icon sun" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <path d="M12 1v2" />
+                            <path d="M12 21v2" />
+                            <path d="M4.22 4.22l1.42 1.42" />
+                            <path d="M18.36 18.36l1.42 1.42" />
+                            <path d="M1 12h2" />
+                            <path d="M21 12h2" />
+                            <path d="M4.22 19.78l1.42-1.42" />
+                            <path d="M18.36 5.64l1.42-1.42" />
+                        </svg>
+                    </span>
+                    <span class="toggle-icon moon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 0111.21 3 7 7 0 0012 21a9 9 0 009-8.21z" />
+                        </svg>
+                    </span>
+                    <span class="toggle-slider"></span>
+                </button>
+            </div>
+            <button class="header__burger" id="burger">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero" id="hero">
+        <div class="hero__overlay"></div>
+        <div class="hero__content">
+            <p class="hero__subtitle animate-fade-up">Қош келдіңіз</p>
+            <h1 class="hero__title animate-fade-up delay-1">TEKEMET</h1>
+            <h2 class="hero__title-sub animate-fade-up delay-2">RESTO-HOTEL</h2>
+            <div class="hero__stars animate-fade-up delay-2">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+            <div class="hero__buttons animate-fade-up delay-3">
+                <a href="#about" class="btn btn--primary">Толығырақ</a>
+                <a href="menu.html" class="btn btn--outline">Мәзір</a>
+            </div>
+        </div>
+        <div class="hero__scroll">
+            <span>&#8595;</span>
+        </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="about" id="about">
+        <div class="container">
+            <div class="about__grid">
+                <div class="about__image">
+                    <img src="images/about__image.jpg" alt="Қонақ үй суреті">
+                </div>
+                <div class="about__text">
+                    <p class="section-label">Біз туралы</p>
+                    <h2 class="section-title">Бес жұлдызды<br>қонақжайлылық тәжірибесі</h2>
+                    <p class="about__desc">
+                        TEKEMET RESTO-HOTEL - жоғары деңгейдегі премиум қонақ үй қызметі мен дәстүрлі қазақ асханасының бірегей үйлесімі. Қонаев қаласының дәл орталығында орналасқан қонақ үйіміз қазақы қонақжайлылық дәстүрін заманауи жайлылықпен ұштастырады.
+                    </p>
+                    <p class="about__desc">
+                        Интерьерден бастап мейрамхана тағамдарына дейінгі әрбір бөлшек қонақтарымыз үшін мұқият ойластырылған. Біз Қазақстанның тарихы мен мәдениеті халықаралық сервис стандарттарымен тоғысатын орынды жасадық.
+                    </p>
+                    <div class="about__features">
+                        <div class="about__feature">
+                            <span class="about__feature-num">5&#9733;</span>
+                            <span>Қызмет деңгейі</span>
+                        </div>
+                        <div class="about__feature">
+                            <span class="about__feature-num">24/7</span>
+                            <span>Ресепшн</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROOMS -->
+    <!-- Все номера рендерятся из Supabase через content-sync.js -->
+    <section class="rooms" id="rooms">
+        <div class="container">
+            <p class="section-label center">Орналасу</p>
+            <h2 class="section-title center">Біздің нөмірлер</h2>
+            <p class="rooms__hint center">Көбірек нөмірлерді көру үшін жылжытыңыз</p>
+            <div class="rooms__carousel-wrap">
+                <div class="rooms__carousel">
+                    <div class="room-card" data-content-key="static-standard">
+                        <div class="room-card__image">
+                            <img src="images/Standart card img.jpeg" alt="Стандарт" loading="lazy" decoding="async">
+                            <span class="room-card__badge">СТАНДАРТ</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Стандарт</h3>
+                            <p>Уютный номер для комфортного размещения двух гостей.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-standard-plus">
+                        <div class="room-card__image">
+                            <img src="images/Standart plus img.jpg" alt="Стандарт плюс" loading="lazy" decoding="async">
+                            <span class="room-card__badge">СТАНДАРТ ПЛЮС</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Стандарт плюс</h3>
+                            <p>Более просторный номер по сравнению со стандартом, идеально подходящий для комфортного размещения двух гостей.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировaть%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-twin">
+                        <div class="room-card__image">
+                            <img src="images/Standart_twinimg.jpeg" alt="Стандарт твин" loading="lazy" decoding="async">
+                            <span class="room-card__badge">СТАНДАРТ ТВИН</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Стандарт твин</h3>
+                            <p>Номер с двумя раздельными кроватями, созданный для удобного и спокойного отдыха.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-junior-suite">
+                        <div class="room-card__image">
+                            <img src="images/juniorsuit_img.jpeg" alt="Полулюкс" loading="lazy" decoding="async">
+                            <span class="room-card__badge">ПОЛУЛЮКС</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Полулюкс</h3>
+                            <p>Просторный и элегантный номер повышенного комфорта, идеально подходящий для размещения до трех гостей.</p>
+                            <ul class="room-card__features">
+                                <li>Кондиционер, кабельное ТВ, Wi‑Fi</li>
+                                <li>Халат, тапочки, душевые принадлежности премиум-класса</li>
+                                <li>Полотенца, вода, чай</li>
+                                <li>Завтрак на 2-х персон включен</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20забронировать%20номер" class="btn btn--small" target="_blank" rel="noopener noreferrer">ЗАБРОНИРОВАТЬ</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="rooms__nav">
+                    <button class="rooms__arrow rooms__arrow--left" id="prevRoom">&#8592;</button>
+                    <button class="rooms__arrow rooms__arrow--right" id="nextRoom">&#8594;</button>
+                </div>
+            </div>
+            <div class="rooms__notes">
+                <p class="rooms__warning"><strong>Нөмірлерде темекі шегуге қатаң тыйым салынады!</strong></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESTAURANT -->
+    <section class="restaurant" id="restaurant">
+        <div class="restaurant__bg"></div>
+        <div class="container">
+            <div class="restaurant__grid">
+                <div class="restaurant__text">
+                    <p class="section-label light">Гастрономия</p>
+                    <h2 class="section-title light">Қазақ асханасы<br>жоғары деңгейде</h2>
+                    <img src="images/restaurant__image.jpg" alt="Tekemet мейрамханасы" class="restaurant__image-mobile">
+                    <p class="restaurant__desc">
+                        Біздің мейрамхана - қазақ асханасының бай дәстүрлеріне жасалған гастрономиялық сапар. Біз ең сапалы жергілікті өнімдермен дайындалған ерекше тағамдарды ұсынамыз.
+                    </p>
+                    <p class="restaurant__desc">
+                        Мәзірден бешбармақтың классикалық түрінен авторлық нұсқаларына дейін, дәмді қуырдақ, хош иісті қазы, бауырсақ және тағы да көптеген тағамдарды таба аласыз. Әр тағамның өз тарихы бар.
+                    </p>
+                    <p class="restaurant__desc">
+                        Салаттар мен негізгі тағамдар қазақы дәстүрге негізделген. Бұл жай ғана ас емес, бұл мәдени әсер.
+                    </p>
+                    <div class="restaurant__highlights">
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>50-60 қонаққа банкеттер</strong>
+                                <p>Жылы атмосферада банкеттер мен салтанатты іс-шараларды толық ұйымдастырамыз.</p>
+                            </div>
+                        </div>
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>20 қонаққа дейін VIP-бөлме</strong>
+                                <p>Жеке кездесулерге, отбасылық кешкі асқа және ерекше іс-шараларға арналған бөлек кеңістік.</p>
+                            </div>
+                        </div>
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>Компанияға арналған тағамдар</strong>
+                                <p>Мәзірде бірге түскі ас ішуге және мерекелерге өте қолайлы тойымды тағамдар ұсынылған.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="menu.html" class="btn btn--gold" id="menu">Мәзірді көру</a>
+                </div>
+                <div class="restaurant__images">
+                    <img src="images/restaurant__image.jpg" alt="Tekemet мейрамханасы" class="restaurant__image tall">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- NEARBY -->
+    <section class="nearby" id="nearby">
+        <div class="container">
+            <p class="section-label center">Демалыс</p>
+            <h2 class="section-title center">Жақын жерде не бар</h2>
+            <p class="nearby__subtitle">Қонақ үйден жаяу жететін қашықтықтағы демалыс пен ойын-сауықтың ең жақсы орындарын ашыңыз</p>
+            <div class="nearby__grid">
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◌</div>
+                    <h3>Konaev Aquapark</h3>
+                    <p>Отбасылық демалысқа арналған бассейндер мен су аттракциондары бар аквапарк. Кез келген ауа райында балалар мен ересектерге қызық.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">⌂</div>
+                    <h3>Family Park</h3>
+                    <p>Балалар мен жасөспірімдерге арналған алаңдары мен белсенділіктері бар отбасылық ойын-сауық орталығы.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◎</div>
+                    <h3>ASP CLUB</h3>
+                    <p>Песчаная косадағы ойын-сауық кешені: картинг, жарыс трассасы, кибер-аймақ, караоке және белсенді демалыс орындары.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◍</div>
+                    <h3>ASP Arena</h3>
+                    <p>Концерттерге, кешкі бағдарламаларға және жанды атмосфераға арналған музыкалық-ойын-сауық алаңы.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">✦</div>
+                    <h3>Qonaev Central Park</h3>
+                    <p>Қаланың тыныш демалысқа арналған жасыл аймақтары мен серуен жолдары бар орталық саябағы.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">✧</div>
+                    <h3>Kosmo</h3>
+                    <p>Заманауи тақырыптағы, жас қонақтарға арналған ойын-сауығы бар балалар демалыс аймағы.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">❋</div>
+                    <h3>Демалыс аймағы</h3>
+                    <p>Балалардың белсенді демалысына арналған қауіпсіз алаңдары бар ашық аспан астындағы аймақ.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">♡</div>
+                    <h3>ООИ «Камкор Журек»</h3>
+                    <p>Әртүрлі жастағыларға арналған іс-шаралар мен мәдени бағдарламалары бар қоғамдық орталық.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MAP -->
+    <section class="map-section" id="contacts">
+        <div class="container">
+            <p class="section-label center">Орналасуы</p>
+            <h2 class="section-title center">Бізді қалай табуға болады</h2>
+            <div class="map__tabs">
+                <button class="map__tab active" data-map="2gis">2GIS</button>
+                <button class="map__tab" data-map="google">Google Maps</button>
+            </div>
+            <div class="map__wrapper">
+                <div class="map__placeholder" id="map2gis">
+                    <div class="map__fallback">
+                        <p class="map__fallback-label">2GIS</p>
+                        <h3>Қонаев, 5-шағын аудан, 45</h3>
+                        <p>2GIS-тегі нақты нүкте сервис шектеулеріне байланысты iframe ішінде көрсетілмейді. Мекенжайды төмендегі батырма арқылы ашыңыз.</p>
+                        <a href="https://2gis.kz/almaty/geo/70000001098045524" class="btn btn--small" target="_blank" rel="noopener noreferrer">2GIS-те ашу</a>
+                    </div>
+                </div>
+                <div class="map__placeholder hidden" id="mapGoogle">
+                    <a href="https://maps.app.goo.gl/BtNqCHYwzs8GnmM9A" class="map__link" target="_blank" rel="noopener noreferrer" aria-label="Google Maps-та мекенжайды ашу">
+                        <iframe src="https://www.google.com/maps?q=%D0%A2%D0%B5%D0%BA%D0%B5%D0%BC%D0%B5%D1%82%20%D0%BE%D1%82%D0%B5%D0%BB%D1%8C%20%D0%9A%D0%BE%D0%BD%D0%B0%D0%B5%D0%B2&z=18&output=embed" width="100%" height="450" frameborder="0" style="border:0; border-radius: 12px;" allowfullscreen loading="lazy"></iframe>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer__grid">
+                <div class="footer__brand">
+                    <h3 class="footer__logo">TEKEMET</h3>
+                    <p class="footer__tagline">RESTO-HOTEL</p>
+                    <p class="footer__desc">Қонаев қаласындағы бес жұлдызды қонақ үй және қазақ асханасы мейрамханасы.</p>
+                    <div class="footer__stars">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+                </div>
+                <div class="footer__col">
+                    <h4>Бөлімдер</h4>
+                    <a href="#about">Біз туралы</a>
+                    <a href="#rooms">Нөмірлер</a>
+                    <a href="#restaurant">Мейрамхана</a>
+                    <a href="#nearby">Жақын жерде</a>
+                </div>
+                <div class="footer__col">
+                    <h4>Байланыс</h4>
+                    <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20уточнить%20информацию%20по%20бронированию%20в%20TEKEMET%20RESTO-HOTEL." class="footer__phone-link" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp-қа жазу">
+                        <span class="footer__icon-outline" aria-hidden="true">☎</span>
+                        <span>+7 707 202 5888</span>
+                    </a>
+                    <p>&#128231; <a href="mailto:tekemet2025@mail.ru">tekemet2025@mail.ru</a></p>
+                    <p>&#128205; Қонаев, 5-шағын аудан, 45</p>
+                        <p><a href="privacy.html">Құпиялық саясаты</a></p>
+                </div>
+                <div class="footer__col">
+                    <h4>Жұмыс уақыты</h4>
+                    <p>Ресепшн: 24/7</p>
+                    <p>Мейрамхана: 07:00 - 23:00</p>
+                    <p>Кіру: 14:00-ден бастап</p>
+                    <p>Шығу: 12:00-ге дейін</p>
+                </div>
+            </div>
+            <div class="footer__bottom">
+                <p>&copy; 2026 Tekemet Qonaev. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-client.js?v=20260501"></script>
+    <script src="content-sync.js?v=20260501"></script>
+    <script src="script.js?v=20260501"></script>
+</body>
+</html>

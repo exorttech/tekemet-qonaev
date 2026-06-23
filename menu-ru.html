@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEKEMET Меню | RESTO-HOTEL | Qonaev | RU</title>
+    <meta name="description" content="Меню TEKEMET: традиционные и авторские блюда казахской кухни.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ru_RU">
+    <meta property="og:site_name" content="TEKEMET RESTO-HOTEL">
+    <meta property="og:title" content="TEKEMET Меню | RESTO-HOTEL | Qonaev | RU">
+    <meta property="og:description" content="Полное меню ресторана с блюдами казахской кухни в Конаеве.">
+    <meta property="og:image" content="images/menu_img.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TEKEMET Меню | RESTO-HOTEL | Qonaev | RU">
+    <meta name="twitter:description" content="Полное меню ресторана с блюдами казахской кухни в Конаеве.">
+    <meta name="twitter:image" content="images/menu_img.jpg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=20260501">
+    <link rel="stylesheet" href="menu-style.css?v=20260607-2">
+</head>
+<body class="menu-page menu-ru-page">
+    <div class="modal-overlay" id="serviceModal">
+        <div class="service-modal">
+            <div class="service-modal__header">
+                <h2>Плата за обслуживание</h2>
+            </div>
+            <div class="service-modal__content">
+                <div class="service-modal__lang" aria-label="Выбор языка">
+                    <a href="menu.html">KZ</a>
+                    <a href="menu-ru.html" class="active">RU</a>
+                    <a href="menu-en.html">EN</a>
+                </div>
+                <p class="service-modal__text">К счёту добавляется дополнительная <strong>10%</strong> плата за обслуживание в ресторане.</p>
+                <p class="service-modal__subtitle">Если у вас есть пищевая аллергия, пожалуйста, заранее сообщите об этом официанту.</p>
+            </div>
+            <div class="service-modal__buttons">
+                <button class="btn btn--primary modal--accept" id="acceptService">Понятно</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="header" id="header">
+        <div class="header__inner">
+            <a href="ru.html" class="header__logo">
+                <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="29.3" y="29.3" width="141.4" height="141.4" rx="4" transform="rotate(45 100 100)" fill="#94C1CA"/>
+                    <g fill="#F3E7CE">
+                        <path d="M100 28 L108 40 L100 36 L92 40 Z"/>
+                        <path d="M82 42 C88 38, 94 44, 100 40 C106 44, 112 38, 118 42" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <ellipse cx="100" cy="48" rx="12" ry="3"/>
+                        <circle cx="86" cy="46" r="2"/>
+                        <circle cx="114" cy="46" r="2"/>
+                        <path d="M76 52 Q88 48, 100 54 Q112 48, 124 52" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                    </g>
+                    <text x="100" y="102" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="400" letter-spacing="4" fill="#F3E7CE">TEKEMET</text>
+                    <text x="100" y="122" text-anchor="middle" font-family="Georgia, serif" font-size="10" font-weight="400" letter-spacing="5" fill="#F3E7CE">QONAQ UYI</text>
+                    <g fill="#F3E7CE">
+                        <path d="M76 148 Q88 152, 100 146 Q112 152, 124 148" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                        <ellipse cx="100" cy="152" rx="12" ry="3"/>
+                        <circle cx="86" cy="154" r="2"/>
+                        <circle cx="114" cy="154" r="2"/>
+                        <path d="M82 158 C88 162, 94 156, 100 160 C106 156, 112 162, 118 158" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <path d="M100 172 L108 160 L100 164 L92 160 Z"/>
+                    </g>
+                </svg>
+            </a>
+            <nav class="header__nav">
+                <a href="ru.html#about">О нас</a>
+                <a href="ru.html#rooms">Номера</a>
+                <a href="menu-ru.html" class="active">Меню</a>
+                <a href="ru.html#nearby">Рядом</a>
+                <a href="ru.html#contacts">Контакты</a>
+            </nav>
+            <div class="header__lang">
+                <a href="menu.html">KZ</a>
+                <a href="menu-ru.html" class="active">RU</a>
+                <a href="menu-en.html">EN</a>
+            </div>
+            <div class="mobile-lang">
+                <a href="menu.html">KZ</a>
+                <a href="menu-ru.html" class="active">RU</a>
+                <a href="menu-en.html">EN</a>
+            </div>
+            <div class="header__controls">
+                <button class="theme-toggle" id="themeToggle" title="Переключить тему">
+                    <span class="toggle-icon sun" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <path d="M12 1v2" />
+                            <path d="M12 21v2" />
+                            <path d="M4.22 4.22l1.42 1.42" />
+                            <path d="M18.36 18.36l1.42 1.42" />
+                            <path d="M1 12h2" />
+                            <path d="M21 12h2" />
+                            <path d="M4.22 19.78l1.42-1.42" />
+                            <path d="M18.36 5.64l1.42-1.42" />
+                        </svg>
+                    </span>
+                    <span class="toggle-icon moon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 0111.21 3 7 7 0 0012 21a9 9 0 009-8.21z" />
+                        </svg>
+                    </span>
+                    <span class="toggle-slider"></span>
+                </button>
+            </div>
+            <button class="header__burger" id="burger"><span></span><span></span><span></span></button>
+        </div>
+    </header>
+
+    <section class="menu-hero" id="menu-hero">
+        <div class="menu-hero__overlay"></div>
+        <div class="menu-hero__content">
+            <p class="menu-hero__subtitle animate-fade-up">Казахская кухня</p>
+            <h1 class="menu-hero__title animate-fade-up delay-1">МЕНЮ</h1>
+            <p class="menu-hero__desc animate-fade-up delay-2">Высочайшее качество и вкус традиционной казахской кухни</p>
+            <div class="menu-hero__scroll animate-fade-up delay-3"><span>&#8595;</span></div>
+        </div>
+    </section>
+
+    <section class="menu-filter">
+        <div class="container">
+            <div class="filter-tabs">
+                <a class="filter-tab active" data-category="hotel-breakfasts" href="#section-hotel-breakfasts">Завтраки Отеля</a>
+                <a class="filter-tab" data-category="breakfast" href="#section-breakfast">Завтраки</a>
+                <a class="filter-tab" data-category="appetizers" href="#section-appetizers">Закуски</a>
+                <a class="filter-tab" data-category="salads" href="#section-salads">Салаты</a>
+                <a class="filter-tab" data-category="soups" href="#section-soups">Супы</a>
+                <a class="filter-tab" data-category="mains" href="#section-mains">Основные блюда</a>
+                <a class="filter-tab" data-category="sharing" href="#section-sharing">На компанию</a>
+                <a class="filter-tab" data-category="sides" href="#section-sides">Гарниры/Соусы</a>
+                <a class="filter-tab" data-category="desserts" href="#section-desserts">Десерты</a>
+                <a class="filter-tab" data-category="bakery" href="#section-bakery">Выпечка</a>
+                <a class="filter-tab" data-category="kids" href="#section-kids">Детское меню</a>
+                <a class="filter-tab" data-category="drinks" href="#section-drinks">Напитки</a>
+                <a class="filter-tab" data-category="dishware" href="#section-dishware">Бой посуды</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="menu-items">
+        <div class="container">
+            <div class="menu-section" id="section-hotel-breakfasts" data-section="hotel-breakfasts"><h2 class="section-title">Завтраки Отеля</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-breakfast" data-section="breakfast"><h2 class="section-title">Завтраки</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-appetizers" data-section="appetizers"><h2 class="section-title">Закуски</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-salads" data-section="salads"><h2 class="section-title">Салаты</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-soups" data-section="soups"><h2 class="section-title">Супы</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-mains" data-section="mains"><h2 class="section-title">Основные блюда</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-sharing" data-section="sharing"><h2 class="section-title">Блюда на компанию</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-sides" data-section="sides"><h2 class="section-title">Гарниры и соусы</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-desserts" data-section="desserts"><h2 class="section-title">Десерты</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-bakery" data-section="bakery"><h2 class="section-title">Выпечка</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-kids" data-section="kids"><h2 class="section-title">Детское меню</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-drinks" data-section="drinks"><h2 class="section-title">Напитки</h2><div class="menu-grid"></div></div>
+            <div class="menu-section" id="section-dishware" data-section="dishware"><h2 class="section-title">Бой посуды</h2><div class="menu-grid"></div></div>
+        </div>
+    </section>
+
+    <section class="menu-cta">
+        <div class="container">
+            <p class="section-label center">Свяжитесь с нами</p>
+            <div class="menu-cta__buttons">
+                <a href="https://wa.me/77072025888?text=Здравствуйте!%20Хочу%20уточнить%20информацию%20по%20бронированию%20в%20TEKEMET%20RESTO-HOTEL." class="btn btn--primary" target="_blank" rel="noopener noreferrer">Свяжитесь с нами</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer__grid">
+                <div class="footer__brand">
+                    <h3 class="footer__logo">TEKEMET</h3>
+                    <p class="footer__tagline">RESTO-HOTEL</p>
+                    <p class="footer__desc">Пятизвёздочный отель и ресторан казахской кухни в городе Конаев.</p>
+                    <div class="footer__stars">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+                </div>
+                <div class="footer__col">
+                    <h4>Разделы</h4>
+                    <a href="index.html#about">О нас</a>
+                    <a href="index.html#rooms">Номера</a>
+                    <a href="menu-ru.html">Меню</a>
+                    <a href="index.html#nearby">Рядом</a>
+                </div>
+                <div class="footer__col">
+                    <h4>Контакты</h4>
+                    <a href="https://wa.me/77072025888" class="footer__phone-link" target="_blank" rel="noopener noreferrer" aria-label="Написать в WhatsApp"><span class="footer__icon-outline" aria-hidden="true">☎</span><span>+7 707 202 5888</span></a>
+                    <p>📧 <a href="mailto:tekemet2025@mail.ru">tekemet2025@mail.ru</a></p>
+                    <p>📍 Конаев, микрорайон 5, 45</p>
+                    <p><a href="privacy.html">Политика конфиденциальности</a></p>
+                </div>
+                <div class="footer__col">
+                    <h4>Часы работы</h4>
+                    <p>Рецепция: 24/7</p>
+                    <p>Ресторан: 07:00 - 23:00</p>
+                    <p>Заезд: с 14:00</p>
+                    <p>Выезд: до 12:00</p>
+                </div>
+            </div>
+            <div class="footer__bottom"><p>&copy; 2026 Tekemet Qonaev. All rights reserved.</p></div>
+        </div>
+    </footer>
+
+    <button class="back-to-top" id="backToTop" type="button" aria-label="Наверх" title="Наверх">↑</button>
+
+    <script src="supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-client.js"></script>
+    <script src="content-sync.js?v=20260607-2"></script>
+    <script src="script.js?v=20260501"></script>
+    <script src="menu-script.js?v=20260501"></script>
+</body>
+</html>

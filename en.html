@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEKEMET RESTO-HOTEL | Qonaev | EN</title>
+    <meta name="description" content="TEKEMET RESTO-HOTEL in Qonaev: five-star hotel, authentic Kazakh restaurant, comfortable rooms, and family-friendly atmosphere.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:site_name" content="TEKEMET RESTO-HOTEL">
+    <meta property="og:title" content="TEKEMET RESTO-HOTEL | Qonaev | EN">
+    <meta property="og:description" content="Five-star hotel and authentic Kazakh restaurant in Qonaev.">
+    <meta property="og:image" content="images/hero-bg.webp">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TEKEMET RESTO-HOTEL | Qonaev | EN">
+    <meta name="twitter:description" content="Five-star hotel and authentic Kazakh restaurant in Qonaev.">
+    <meta name="twitter:image" content="images/hero-bg.webp">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=20260501">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="header" id="header">
+        <div class="header__inner">
+            <a href="#" class="header__logo">
+                <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Diamond shape -->
+                    <rect x="29.3" y="29.3" width="141.4" height="141.4" rx="4" transform="rotate(45 100 100)" fill="#94C1CA"/>
+                    <!-- Top ornament -->
+                    <g fill="#F3E7CE">
+                        <path d="M100 28 L108 40 L100 36 L92 40 Z"/>
+                        <path d="M82 42 C88 38, 94 44, 100 40 C106 44, 112 38, 118 42" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <ellipse cx="100" cy="48" rx="12" ry="3"/>
+                        <circle cx="86" cy="46" r="2"/>
+                        <circle cx="114" cy="46" r="2"/>
+                        <path d="M76 52 Q88 48, 100 54 Q112 48, 124 52" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                    </g>
+                    <!-- Main text -->
+                    <text x="100" y="102" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="400" letter-spacing="4" fill="#F3E7CE">TEKEMET</text>
+                    <!-- Subtitle -->
+                    <text x="100" y="122" text-anchor="middle" font-family="Georgia, serif" font-size="10" font-weight="400" letter-spacing="5" fill="#F3E7CE">QONAQ UYI</text>
+                    <!-- Bottom ornament -->
+                    <g fill="#F3E7CE">
+                        <path d="M76 148 Q88 152, 100 146 Q112 152, 124 148" stroke="#F3E7CE" stroke-width="1" fill="none"/>
+                        <ellipse cx="100" cy="152" rx="12" ry="3"/>
+                        <circle cx="86" cy="154" r="2"/>
+                        <circle cx="114" cy="154" r="2"/>
+                        <path d="M82 158 C88 162, 94 156, 100 160 C106 156, 112 162, 118 158" stroke="#F3E7CE" stroke-width="1.5" fill="none"/>
+                        <path d="M100 172 L108 160 L100 164 L92 160 Z"/>
+                    </g>
+                </svg>
+            </a>
+            <nav class="header__nav">
+                <a href="#about">About</a>
+                <a href="#rooms">Rooms</a>
+                <a href="#restaurant">Restaurant</a>
+                <a href="#nearby">Nearby</a>
+                <a href="#contacts">Contacts</a>
+            </nav>
+            <div class="header__lang">
+                <a href="index.html">KZ</a>
+                <a href="ru.html">RU</a>
+                <a href="en.html" class="active">EN</a>
+            </div>
+            <!-- Mobile language buttons (visible only on mobile) -->
+            <div class="mobile-lang">
+                <a href="index.html">KZ</a>
+                <a href="ru.html">RU</a>
+                <a href="en.html" class="active">EN</a>
+            </div>
+            <div class="header__controls">
+                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                    <span class="toggle-icon sun" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="5" />
+                            <path d="M12 1v2" />
+                            <path d="M12 21v2" />
+                            <path d="M4.22 4.22l1.42 1.42" />
+                            <path d="M18.36 18.36l1.42 1.42" />
+                            <path d="M1 12h2" />
+                            <path d="M21 12h2" />
+                            <path d="M4.22 19.78l1.42-1.42" />
+                            <path d="M18.36 5.64l1.42-1.42" />
+                        </svg>
+                    </span>
+                    <span class="toggle-icon moon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 0111.21 3 7 7 0 0012 21a9 9 0 009-8.21z" />
+                        </svg>
+                    </span>
+                    <span class="toggle-slider"></span>
+                </button>
+            </div>
+            <button class="header__burger" id="burger">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero" id="hero">
+        <div class="hero__overlay"></div>
+        <div class="hero__content">
+            <p class="hero__subtitle animate-fade-up">Welcome</p>
+            <h1 class="hero__title animate-fade-up delay-1">TEKEMET</h1>
+            <h2 class="hero__title-sub animate-fade-up delay-2">RESTO-HOTEL</h2>
+            <div class="hero__stars animate-fade-up delay-2">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+            <div class="hero__buttons animate-fade-up delay-3">
+                <a href="#about" class="btn btn--primary">Learn more</a>
+                <a href="menu-en.html" class="btn btn--outline">Menu</a>
+            </div>
+        </div>
+        <div class="hero__scroll">
+            <span>&#8595;</span>
+        </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="about" id="about">
+        <div class="container">
+            <div class="about__grid">
+                <div class="about__image">
+                    <img src="images/about__image.jpg" alt="Hotel photo">
+                </div>
+                <div class="about__text">
+                    <p class="section-label">About</p>
+                    <h2 class="section-title">A Five-Star<br>Hospitality Experience</h2>
+                    <p class="about__desc">
+                        TEKEMET RESTO-HOTEL is a unique blend of premium hotel service and authentic Kazakh cuisine at the highest level. Located in the heart of Qonaev, our hotel combines the best traditions of Kazakh hospitality with modern comfort.
+                    </p>
+                    <p class="about__desc">
+                        Every detail, from the interiors to the dishes in our restaurant, is thoughtfully designed for our guests. We created a place where the history and culture of Kazakhstan meet international service standards.
+                    </p>
+                    <div class="about__features">
+                        <div class="about__feature">
+                            <span class="about__feature-num">5&#9733;</span>
+                            <span>Service level</span>
+                        </div>
+                        <div class="about__feature">
+                            <span class="about__feature-num">24/7</span>
+                            <span>Reception</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROOMS -->
+    <!-- Все номера рендерятся из Supabase через content-sync.js -->
+    <section class="rooms" id="rooms">
+        <div class="container">
+            <p class="section-label center">Accommodation</p>
+            <h2 class="section-title center">Our Rooms</h2>
+            <p class="rooms__hint center">Scroll to see more room options</p>
+            <div class="rooms__carousel-wrap">
+                <div class="rooms__carousel">
+                    <div class="room-card" data-content-key="static-standard">
+                        <div class="room-card__image">
+                            <img src="images/Standart card img.jpeg" alt="Standard" loading="lazy" decoding="async">
+                            <span class="room-card__badge">STANDARD</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Standard</h3>
+                            <p>Comfortable room for convenient accommodation of two guests.</p>
+                            <ul class="room-card__features">
+                                <li>Air conditioning, cable TV, Wi‑Fi</li>
+                                <li>Robe, slippers, toiletries</li>
+                                <li>Towels, water, tea</li>
+                                <li>Breakfast for 2 persons included</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Hello!%20I%20would%20like%20to%20book%20a%20room" class="btn btn--small" target="_blank" rel="noopener noreferrer">BOOK NOW</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-standard-plus">
+                        <div class="room-card__image">
+                            <img src="images/Standart plus img.jpg" alt="Standard Plus" loading="lazy" decoding="async">
+                            <span class="room-card__badge">STANDARD PLUS</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Standard Plus</h3>
+                            <p>More spacious room compared to standard, ideal for comfortable accommodation of two guests.</p>
+                            <ul class="room-card__features">
+                                <li>Air conditioning, cable TV, Wi‑Fi</li>
+                                <li>Robe, slippers, toiletries</li>
+                                <li>Towels, water, tea</li>
+                                <li>Breakfast for 2 persons included</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Hello!%20I%20would%20like%20to%20book%20a%20room" class="btn btn--small" target="_blank" rel="noopener noreferrer">BOOK NOW</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-twin">
+                        <div class="room-card__image">
+                            <img src="images/Standart_twinimg.jpeg" alt="Standard Twin" loading="lazy" decoding="async">
+                            <span class="room-card__badge">STANDARD TWIN</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Standard Twin</h3>
+                            <p>Room with two separate beds, created for comfortable and peaceful relaxation.</p>
+                            <ul class="room-card__features">
+                                <li>Air conditioning, cable TV, Wi‑Fi</li>
+                                <li>Robe, slippers, toiletries</li>
+                                <li>Towels, water, tea</li>
+                                <li>Breakfast for 2 persons included</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Hello!%20I%20would%20like%20to%20book%20a%20room" class="btn btn--small" target="_blank" rel="noopener noreferrer">BOOK NOW</a>
+                        </div>
+                    </div>
+
+                    <div class="room-card" data-content-key="static-junior-suite">
+                        <div class="room-card__image">
+                            <img src="images/juniorsuit_img.jpeg" alt="Semi-Luxury" loading="lazy" decoding="async">
+                            <span class="room-card__badge">SEMI-LUXURY</span>
+                        </div>
+                        <div class="room-card__info">
+                            <h3>Semi-Luxury</h3>
+                            <p>Spacious and elegant room with enhanced comfort, ideal for accommodation up to three guests.</p>
+                            <ul class="room-card__features">
+                                <li>Air conditioning, cable TV, Wi‑Fi</li>
+                                <li>Robe, slippers, premium toiletries</li>
+                                <li>Towels, water, tea</li>
+                                <li>Breakfast for 2 persons included</li>
+                            </ul>
+                            <a href="https://wa.me/77072025888?text=Hello!%20I%20would%20like%20to%20book%20a%20room" class="btn btn--small" target="_blank" rel="noopener noreferrer">BOOK NOW</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="rooms__nav">
+                    <button class="rooms__arrow rooms__arrow--left" id="prevRoom">&#8592;</button>
+                    <button class="rooms__arrow rooms__arrow--right" id="nextRoom">&#8594;</button>
+                </div>
+            </div>
+            <div class="rooms__notes">
+                <p class="rooms__warning"><strong>Smoking in rooms is strictly prohibited!</strong></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESTAURANT -->
+    <section class="restaurant" id="restaurant">
+        <div class="restaurant__bg"></div>
+        <div class="container">
+            <div class="restaurant__grid">
+                <div class="restaurant__text">
+                    <p class="section-label light">Gastronomy</p>
+                    <h2 class="section-title light">Kazakh Cuisine<br>At the Highest Level</h2>
+                    <img src="images/restaurant__image.jpg" alt="Tekemet restaurant" class="restaurant__image-mobile">
+                    <p class="restaurant__desc">
+                        Our restaurant is a gastronomic journey through the rich traditions of Kazakh cuisine. We offer signature dishes prepared with authentic recipes and the finest local ingredients.
+                    </p>
+                    <p class="restaurant__desc">
+                        In our menu, you will find a wide variety of beshbarmak, from classic to chef interpretations, tender kuyrdak, aromatic kazy, baursaks, and dozens of other dishes, each telling its own story.
+                    </p>
+                    <p class="restaurant__desc">
+                        Our salads and main courses are inspired by Kazakh traditions. This is not just food, it is a cultural experience.
+                    </p>
+                    <div class="restaurant__highlights">
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>Banquets for 50-60 guests</strong>
+                                <p>We organize banquets and celebrations in a cozy atmosphere with full event support.</p>
+                            </div>
+                        </div>
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>VIP room for up to 20 guests</strong>
+                                <p>A separate space for private meetings, family dinners, and special events.</p>
+                            </div>
+                        </div>
+                        <div class="restaurant__highlight">
+                            <span class="restaurant__highlight-icon">&#9830;</span>
+                            <div>
+                                <strong>Sharing dishes</strong>
+                                <p>The menu includes hearty dishes perfect for group lunches and celebrations.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="menu-en.html" class="btn btn--gold" id="menu">View menu</a>
+                </div>
+                <div class="restaurant__images">
+                    <img src="images/restaurant__image.jpg" alt="Tekemet restaurant" class="restaurant__image tall">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- NEARBY -->
+    <section class="nearby" id="nearby">
+        <div class="container">
+            <p class="section-label center">Leisure</p>
+            <h2 class="section-title center">What Is Nearby</h2>
+            <p class="nearby__subtitle">Discover the best places for recreation and entertainment within walking distance of the hotel</p>
+            <div class="nearby__grid">
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◌</div>
+                    <h3>Konaev Aquapark</h3>
+                    <p>A water park with pools and attractions for family recreation. Fun for kids and adults in any weather.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">⌂</div>
+                    <h3>Family Park</h3>
+                    <p>A family entertainment center with playgrounds and activities for children and teenagers.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◎</div>
+                    <h3>ASP CLUB</h3>
+                    <p>An entertainment complex on the Sand Spit: karting, race track, cyber zone, karaoke, and activity areas.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">◍</div>
+                    <h3>ASP Arena</h3>
+                    <p>A music and entertainment venue for concerts, evening programs, and a vibrant atmosphere.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">✦</div>
+                    <h3>Qonaev Central Park</h3>
+                    <p>The city's central park with green areas and walking spaces for peaceful relaxation.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">✧</div>
+                    <h3>Kosmo</h3>
+                    <p>A children's recreation zone with a modern theme and attractions for young guests.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">❋</div>
+                    <h3>Recreation Zone</h3>
+                    <p>An outdoor children's area with safe playgrounds for active play.</p>
+                </div>
+                <div class="nearby-card">
+                    <div class="nearby-card__icon">♡</div>
+                    <h3>OOI Kamkor Zhurek</h3>
+                    <p>A community center with events and cultural programs for different age groups.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MAP -->
+    <section class="map-section" id="contacts">
+        <div class="container">
+            <p class="section-label center">Location</p>
+            <h2 class="section-title center">How to Find Us</h2>
+            <div class="map__tabs">
+                <button class="map__tab active" data-map="google">Google Maps</button>
+                <button class="map__tab" data-map="2gis">2GIS</button>
+            </div>
+            <div class="map__wrapper">
+                <div class="map__placeholder hidden" id="map2gis">
+                    <div class="map__fallback">
+                        <p class="map__fallback-label">2GIS</p>
+                        <h3>Qonaev, microdistrict 5, 45</h3>
+                        <p>The direct 2GIS point cannot be displayed inside an iframe due to service limitations. Open the address using the button below.</p>
+                        <a href="https://2gis.kz/almaty/geo/70000001098045524" class="btn btn--small" target="_blank" rel="noopener noreferrer">Open in 2GIS</a>
+                    </div>
+                </div>
+                <div class="map__placeholder" id="mapGoogle">
+                    <a href="https://maps.app.goo.gl/BtNqCHYwzs8GnmM9A" class="map__link" target="_blank" rel="noopener noreferrer" aria-label="Open address in Google Maps">
+                        <iframe src="https://www.google.com/maps?q=%D0%A2%D0%B5%D0%BA%D0%B5%D0%BC%D0%B5%D1%82%20%D0%BE%D1%82%D0%B5%D0%BB%D1%8C%20%D0%9A%D0%BE%D0%BD%D0%B0%D0%B5%D0%B2&z=18&output=embed" width="100%" height="450" frameborder="0" style="border:0; border-radius: 12px;" allowfullscreen loading="lazy"></iframe>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer__grid">
+                <div class="footer__brand">
+                    <h3 class="footer__logo">TEKEMET</h3>
+                    <p class="footer__tagline">RESTO-HOTEL</p>
+                    <p class="footer__desc">A five-star hotel and Kazakh cuisine restaurant in the city of Qonaev.</p>
+                    <div class="footer__stars">&#9733; &#9733; &#9733; &#9733; &#9733;</div>
+                </div>
+                <div class="footer__col">
+                    <h4>Navigation</h4>
+                    <a href="#about">About</a>
+                    <a href="#rooms">Rooms</a>
+                    <a href="#restaurant">Restaurant</a>
+                    <a href="#nearby">Nearby</a>
+                </div>
+                <div class="footer__col">
+                    <h4>Contacts</h4>
+                    <a href="https://wa.me/77072025888?text=Hello!%20I%20would%20like%20to%20get%20more%20information%20about%20booking%20at%20TEKEMET%20RESTO-HOTEL." class="footer__phone-link" target="_blank" rel="noopener noreferrer" aria-label="Write on WhatsApp">
+                        <span class="footer__icon-outline" aria-hidden="true">☎</span>
+                        <span>+7 707 202 5888</span>
+                    </a>
+                    <p>&#128231; <a href="mailto:tekemet2025@mail.ru">tekemet2025@mail.ru</a></p>
+                    <p>&#128205; Qonaev, microdistrict 5, 45</p>
+                    <p><a href="privacy.html">Privacy Policy</a></p>
+                </div>
+                <div class="footer__col">
+                    <h4>Working Hours</h4>
+                    <p>Reception: 24/7</p>
+                    <p>Restaurant: 07:00 - 23:00</p>
+                    <p>Check-in: from 14:00</p>
+                    <p>Check-out: until 12:00</p>
+                </div>
+            </div>
+            <div class="footer__bottom">
+                <p>&copy; 2026 Tekemet Qonaev. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-client.js?v=20260501"></script>
+    <script src="content-sync.js?v=20260501"></script>
+    <script src="script.js?v=20260501"></script>
+</body>
+</html>
