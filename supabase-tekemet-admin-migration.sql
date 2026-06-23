@@ -64,20 +64,38 @@ create table if not exists public.menu_items (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.menu_analytics_events (
-  id uuid primary key default gen_random_uuid(),
-  restaurant_id uuid not null references public.restaurants(id) on delete cascade,
-  event_type text not null,
-  menu_item_id uuid references public.menu_items(id) on delete set null,
-  language text,
-  device_type text,
-  session_id text,
-  user_agent text,
-  referrer text,
-  created_at timestamptz not null default now(),
-  constraint menu_analytics_event_type_check check (event_type in ('menu_open', 'dish_open', 'language_change')),
-  constraint menu_analytics_device_type_check check (device_type is null or device_type in ('mobile', 'tablet', 'desktop'))
-);
+do $$
+declare
+  menu_item_id_type text;
+begin
+  select format_type(attribute.atttypid, attribute.atttypmod)
+    into menu_item_id_type
+  from pg_attribute attribute
+  where attribute.attrelid = 'public.menu_items'::regclass
+    and attribute.attname = 'id'
+    and not attribute.attisdropped;
+
+  if menu_item_id_type is null then
+    raise exception 'public.menu_items.id column was not found';
+  end if;
+
+  execute format($create_table$
+    create table if not exists public.menu_analytics_events (
+      id uuid primary key default gen_random_uuid(),
+      restaurant_id uuid not null references public.restaurants(id) on delete cascade,
+      event_type text not null,
+      menu_item_id %s references public.menu_items(id) on delete set null,
+      language text,
+      device_type text,
+      session_id text,
+      user_agent text,
+      referrer text,
+      created_at timestamptz not null default now(),
+      constraint menu_analytics_event_type_check check (event_type in ('menu_open', 'dish_open', 'language_change')),
+      constraint menu_analytics_device_type_check check (device_type is null or device_type in ('mobile', 'tablet', 'desktop'))
+    )
+  $create_table$, menu_item_id_type);
+end $$;
 
 create or replace function public.set_updated_at() returns trigger language plpgsql as $$
 begin

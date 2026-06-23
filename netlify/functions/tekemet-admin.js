@@ -491,7 +491,7 @@ async function getDishNames(env, restaurantId, dishIds) {
 }
 
 async function resolveAnalyticsMenuItemId(env, restaurantId, menuItemId) {
-  if (!isUuid(menuItemId)) return null;
+  if (!isDatabaseId(menuItemId)) return null;
   const rows = await supabaseRest(env, "menu_items", {
     query: {
       select: "id",
@@ -826,6 +826,11 @@ function normalizeAnalyticsLanguage(value) {
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function isDatabaseId(value) {
+  const normalized = String(value || "").trim();
+  return isUuid(normalized) || /^[1-9]\d*$/.test(normalized);
 }
 
 function startOfUtcDay(date) {
