@@ -303,35 +303,114 @@ async function translate(env, action, body, slug) {
 }
 
 async function trackAnalyticsEvent(env, slug, body) {
-  return jsonResponse(200, { ok: true, tracked: false });
+  try {
+    const eventType = normalizeEventType(body.eventType);
+    if (!eventType) return jsonResponse(200, { ok: true, tracked: false });
+
+    const menuItemId = eventType === "dish_open"
+      ? await resolveAnalyticsContentItemId(env, body.menuItemId)
+      : null;
+
+    await supabaseRest(env, "content_items", {
+      method: "POST",
+      body: [{
+        content_type: "analytics_event",
+        section_key: eventType,
+        content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title_ru: menuItemId ? String(menuItemId) : "",
+        title_en: normalizeAnalyticsLanguage(body.language) || "",
+        title_kk: normalizeDeviceType(body.deviceType) || "",
+        description_ru: cleanLimited(body.sessionId, 120) || "",
+        description_en: cleanLimited(body.referrer, 500) || "",
+        description_kk: cleanLimited(body.userAgent, 500) || "",
+        is_active: true,
+        sort_order: Date.now(),
+      }],
+      prefer: "return=minimal",
+    });
+
+    return jsonResponse(200, { ok: true, tracked: true });
+  } catch (error) {
+    console.warn("[tekemet-admin-function] analytics tracking skipped", error?.message || error);
+    return jsonResponse(200, { ok: true, tracked: false });
+  }
 }
 
 async function getAnalytics(env, slug, range = "today") {
   const timeZone = DEFAULT_RESTAURANT_TIME_ZONE;
-  const todayKey = formatDateKeyInTimeZone(new Date(), timeZone);
+  const normalizedRange = normalizeAnalyticsRange(range);
+  const now = new Date();
+  const todayKey = formatDateKeyInTimeZone(now, timeZone);
+  const yesterdayKey = shiftDateKey(todayKey, -1);
   const last7StartKey = shiftDateKey(todayKey, -6);
   const last30StartKey = shiftDateKey(todayKey, -29);
+  const yearStartKey = `${todayKey.slice(0, 4)}-01-01`;
+  const selectedStartKey = getRangeStartKey(normalizedRange, todayKey, last7StartKey, last30StartKey, yearStartKey);
+  const queryStartKey = normalizedRange === "year" ? yearStartKey : shiftDateKey(last30StartKey, -1);
+  const queryStart = dateKeyToUtcDate(queryStartKey);
+  const rawEvents = await getAnalyticsEvents(env, normalizedRange === "all" ? null : queryStart);
+  const events = rawEvents.map((event) => withAnalyticsLocalTime(event, timeZone));
+  const selectedEvents = selectedStartKey
+    ? events.filter((event) => isEventOnOrAfterLocalDate(event, selectedStartKey))
+    : events;
+  const selectedDishOpens = selectedEvents.filter((event) => event.event_type === "dish_open");
+  const todayDishOpens = events.filter((event) => (
+    event.event_type === "dish_open" &&
+    event.localDateKey === todayKey
+  ));
+  const dishCounts = countBy(selectedDishOpens.filter((event) => event.menu_item_id), "menu_item_id");
+  const todayDishCounts = countBy(todayDishOpens.filter((event) => event.menu_item_id), "menu_item_id");
+  const dishIds = Array.from(new Set([...Object.keys(dishCounts), ...Object.keys(todayDishCounts)]));
+  const dishNames = await getContentDishNames(env, dishIds);
 
   return jsonResponse(200, {
     ok: true,
     analytics: {
-      menuVisits: { today: 0, yesterday: 0, last7Days: 0, last30Days: 0, year: 0, allTime: 0 },
-      uniqueGuests: { today: 0, last7Days: 0, last30Days: 0, year: 0, allTime: 0 },
-      dishOpens: { today: 0, last7Days: 0, last30Days: 0, year: 0, allTime: 0 },
+      menuVisits: {
+        today: countEventsByLocalDateRange(events, "menu_open", todayKey, shiftDateKey(todayKey, 1)),
+        yesterday: countEventsByLocalDateRange(events, "menu_open", yesterdayKey, todayKey),
+        last7Days: countEventsByLocalDateRange(events, "menu_open", last7StartKey, shiftDateKey(todayKey, 1)),
+        last30Days: countEventsByLocalDateRange(events, "menu_open", last30StartKey, shiftDateKey(todayKey, 1)),
+        year: countEventsByLocalDateRange(events, "menu_open", yearStartKey, shiftDateKey(todayKey, 1)),
+        allTime: events.filter((event) => event.event_type === "menu_open").length,
+      },
+      uniqueGuests: {
+        today: countUniqueSessionsByLocalDateRange(events, todayKey, shiftDateKey(todayKey, 1)),
+        last7Days: countUniqueSessionsByLocalDateRange(events, last7StartKey, shiftDateKey(todayKey, 1)),
+        last30Days: countUniqueSessionsByLocalDateRange(events, last30StartKey, shiftDateKey(todayKey, 1)),
+        year: countUniqueSessionsByLocalDateRange(events, yearStartKey, shiftDateKey(todayKey, 1)),
+        allTime: countUniqueSessionsByLocalDateRange(events, null, null),
+      },
+      dishOpens: {
+        today: countEventsByLocalDateRange(events, "dish_open", todayKey, shiftDateKey(todayKey, 1)),
+        last7Days: countEventsByLocalDateRange(events, "dish_open", last7StartKey, shiftDateKey(todayKey, 1)),
+        last30Days: countEventsByLocalDateRange(events, "dish_open", last30StartKey, shiftDateKey(todayKey, 1)),
+        year: countEventsByLocalDateRange(events, "dish_open", yearStartKey, shiftDateKey(todayKey, 1)),
+        allTime: events.filter((event) => event.event_type === "dish_open").length,
+      },
       averageViewTime: null,
-      popularDishes: [],
-      popularDishesToday: [],
-      visitsByHour: buildVisitsByHour([], timeZone),
-      visitsByDay: buildVisitsByDay([], last7StartKey, todayKey, timeZone),
-      visitsByWeek: buildVisitsByWeek([], last30StartKey, todayKey, timeZone),
-      visitsByMonth: buildVisitsByMonth([], Number(todayKey.slice(0, 4)), timeZone),
-      dayDetails: buildDayDetails([], last30StartKey, todayKey, timeZone),
-      allTimeSummary: buildAllTimeSummary([], timeZone),
-      languages: [],
-      devices: [],
-      recentEvents: [],
+      popularDishes: dishIds
+        .map((id) => ({ id, title: dishNames[id] || "Блюдо", opens: dishCounts[id] }))
+        .sort((a, b) => b.opens - a.opens)
+        .slice(0, 10),
+      popularDishesToday: Object.keys(todayDishCounts)
+        .map((id) => ({ id, title: dishNames[id] || "Блюдо", opens: todayDishCounts[id] }))
+        .sort((a, b) => b.opens - a.opens)
+        .slice(0, 5),
+      visitsByHour: buildVisitsByHour(events.filter((event) => (
+        event.event_type === "menu_open" &&
+        event.localDateKey === todayKey
+      )), timeZone),
+      visitsByDay: buildVisitsByDay(events, last7StartKey, todayKey, timeZone),
+      visitsByWeek: buildVisitsByWeek(events, last30StartKey, todayKey, timeZone),
+      visitsByMonth: buildVisitsByMonth(events, Number(todayKey.slice(0, 4)), timeZone),
+      dayDetails: buildDayDetails(events, last30StartKey, todayKey, timeZone),
+      allTimeSummary: buildAllTimeSummary(events, timeZone),
+      languages: buildPercentRows(selectedEvents, "language", "language", (value) => String(value || "").toUpperCase()),
+      devices: buildPercentRows(selectedEvents, "device_type", "device"),
+      recentEvents: buildRecentEvents(selectedEvents.slice(0, 10), dishNames, timeZone),
       timeZone,
-      range,
+      range: normalizedRange,
     },
   });
 }
@@ -357,6 +436,65 @@ async function getContentItem(env, id) {
 
   if (!rows[0]) throw new Error("Menu item was not found.");
   return rows[0];
+}
+
+async function getAnalyticsEvents(env, fromDate) {
+  try {
+    const rows = await supabaseRest(env, "content_items", {
+      query: {
+        select: "id,section_key,title_ru,title_en,title_kk,description_ru,created_at",
+        content_type: "eq.analytics_event",
+        ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
+        order: "created_at.desc",
+        limit: "10000",
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      event_type: row.section_key,
+      menu_item_id: row.title_ru || null,
+      language: row.title_en || null,
+      device_type: row.title_kk || null,
+      session_id: row.description_ru || null,
+      created_at: row.created_at,
+    }));
+  } catch (error) {
+    console.warn("[tekemet-admin-function] analytics read skipped", error?.message || error);
+    return [];
+  }
+}
+
+async function getContentDishNames(env, dishIds) {
+  if (!dishIds.length) return {};
+  const rows = await supabaseRest(env, "content_items", {
+    query: {
+      select: "id,title_ru,title_en,title_kk",
+      content_type: "eq.menu",
+      id: `in.(${dishIds.join(",")})`,
+    },
+  });
+
+  return Object.fromEntries(rows.map((row) => [
+    row.id,
+    clean(row.title_ru || row.title_en || row.title_kk || "Блюдо"),
+  ]));
+}
+
+async function resolveAnalyticsContentItemId(env, menuItemId) {
+  if (!isDatabaseId(menuItemId)) return null;
+  try {
+    const rows = await supabaseRest(env, "content_items", {
+      query: {
+        select: "id",
+        content_type: "eq.menu",
+        id: `eq.${menuItemId}`,
+        limit: "1",
+      },
+    });
+    return rows[0]?.id || null;
+  } catch {
+    return null;
+  }
 }
 
 function getVirtualRestaurant(slug) {

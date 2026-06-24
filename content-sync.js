@@ -127,10 +127,10 @@
                             return '<h3 class="menu-drinks-group-title">' + escapeHtml(title) + '</h3>';
                         }
 
-                        let html = '<div class="menu-item' + (hasImage ? ' has-image' : '') + (isTextOnlySection ? ' menu-item--text-only' : '') + '" data-content-key="' + escapeHtml(record.content_key) + '">';
+                        let html = '<div class="menu-item' + (hasImage ? ' has-image' : '') + (isTextOnlySection ? ' menu-item--text-only' : '') + '" data-content-id="' + escapeHtml(record.id) + '" data-content-key="' + escapeHtml(record.content_key) + '">';
 
                         if (!isTextOnlySection) {
-                            html += '<div class="menu-item__media' + (hasImage ? ' menu-item__media--clickable' : '') + '"' + (hasImage ? ' role="button" tabindex="0" data-image-url="' + escapeHtml(imageUrl) + '" data-image-title="' + escapeHtml(title) + '" aria-label="Открыть фото: ' + escapeHtml(title) + '"' : '') + '>';
+                            html += '<div class="menu-item__media' + (hasImage ? ' menu-item__media--clickable' : '') + '"' + (hasImage ? ' role="button" tabindex="0" data-content-id="' + escapeHtml(record.id) + '" data-image-url="' + escapeHtml(imageUrl) + '" data-image-title="' + escapeHtml(title) + '" aria-label="Открыть фото: ' + escapeHtml(title) + '"' : '') + '>';
                             if (hasImage) {
                                 html += '<img class="menu-item__image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '" loading="lazy" decoding="async">';
                             } else {
@@ -189,7 +189,7 @@
                 const badge = localeField(record, 'badge') || title;
                 const imageUrl = resolveImageUrl(record, client) || 'images/hero-bg.webp';
 
-                let html = '<div class="room-card" data-content-key="' + escapeHtml(record.content_key) + '">';
+                let html = '<div class="room-card" data-content-id="' + escapeHtml(record.id) + '" data-content-key="' + escapeHtml(record.content_key) + '">';
 
                 html += '<div class="room-card__image"><img src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '" loading="lazy" decoding="async"><span class="room-card__badge">' + escapeHtml(badge) + '</span></div>';
 
@@ -268,6 +268,7 @@
 
             if (pageKind === MENU_TYPE) {
                 renderMenuItems(records, client);
+                trackMenuEvent('menu_open');
             } else {
                 renderRoomItems(records, client);
             }
@@ -316,6 +317,7 @@
             const records = payload.items || [];
             if (pageKind === MENU_TYPE) {
                 renderMenuItems(records, null);
+                trackMenuEvent('menu_open');
             } else {
                 renderRoomItems(records, null);
             }
@@ -353,8 +355,52 @@
         });
     });
 
+    function getAnalyticsSessionId() {
+        const key = 'tekemet.analytics.session';
+        let value = sessionStorage.getItem(key);
+        if (!value) {
+            value = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+            sessionStorage.setItem(key, value);
+        }
+        return value;
+    }
+
+    function getDeviceType() {
+        const width = window.innerWidth || document.documentElement.clientWidth || 0;
+        if (width < 768) return 'mobile';
+        if (width < 1100) return 'tablet';
+        return 'desktop';
+    }
+
+    function trackMenuEvent(eventType, menuItemId) {
+        if (!eventType) return;
+        fetch('/.netlify/functions/tekemet-admin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'trackAnalyticsEvent',
+                eventType,
+                menuItemId: menuItemId || null,
+                language: locale,
+                deviceType: getDeviceType(),
+                sessionId: getAnalyticsSessionId(),
+                userAgent: navigator.userAgent || '',
+                referrer: document.referrer || ''
+            })
+        }).catch(() => {});
+    }
+
+    document.addEventListener('click', (event) => {
+        const media = event.target.closest('.menu-item__media--clickable');
+        if (!media) return;
+        const item = media.closest('.menu-item');
+        const contentId = media.dataset.contentId || (item && item.dataset.contentId) || '';
+        if (contentId) trackMenuEvent('dish_open', contentId);
+    });
+
     window.TekemetContentSync = {
         refresh: loadAndRender,
         locale
     };
 })();
+
