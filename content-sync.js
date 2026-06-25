@@ -222,8 +222,12 @@
     }
 
     async function loadAndRender() {
+        const loadedFromBackend = await loadAndRenderFromBackend();
+        if (loadedFromBackend) {
+            return;
+        }
+
         if (!window.TekemetSupabase || !window.TekemetSupabase.hasConfig()) {
-            await loadAndRenderFromBackend();
             return;
         }
 
@@ -297,7 +301,7 @@
                 console.warn('Failed to load hero image from DB fallback:', err);
             }
         } catch (error) {
-            console.warn('Content render error:', error);
+            console.warn('Не удалось отрисовать контент из Supabase:', error);
         }
     }
 
@@ -310,8 +314,8 @@
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.error) {
-                console.warn('Content backend load failed:', payload.error || response.status);
-                return;
+                console.warn('Не удалось загрузить контент через backend:', payload.error || response.status);
+                return false;
             }
 
             const records = payload.items || [];
@@ -321,8 +325,10 @@
             } else {
                 renderRoomItems(records, null);
             }
+            return true;
         } catch (error) {
-            console.warn('Content backend render error:', error);
+            console.warn('Ошибка загрузки контента через backend:', error);
+            return false;
         }
     }
 
@@ -351,7 +357,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         applyMenuHeroImage();
         loadAndRender().catch((error) => {
-            console.warn('Content sync failed:', error);
+            console.warn('Синхронизация контента не выполнена:', error);
         });
     });
 

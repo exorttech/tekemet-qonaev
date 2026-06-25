@@ -299,7 +299,27 @@ function sanitizeSlug(value) {
 }
 
 function getAdminApiUrl() {
-  return window.TEKEMET_ADMIN_API || "/.netlify/functions/tekemet-admin";
+  const configured = window.EXORT_ADMIN_API_CONFIG?.endpoint || window.TEKEMET_ADMIN_API || "";
+  if (configured) return configured;
+  return isLocalAdminHost() ? "" : "/.netlify/functions/tekemet-admin";
+}
+
+function isLocalAdminHost() {
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function getAdminApiConfigError() {
+  const explicitError = window.EXORT_ADMIN_API_CONFIG?.configError || "";
+  if (explicitError) return explicitError;
+  if (ADMIN_API_URL) return "";
+  if (isLocalAdminHost()) {
+    return "Для локального входа через Live Server укажите полный URL Cloudflare Worker в window.EXORT_ADMIN_API_URL или localStorage key exort.admin.apiUrl.";
+  }
+  return "Адрес сервиса Exort Admin не настроен.";
+}
+
+function getPublicMenuUrl() {
+  return new URL("/menu-ru.html", window.location.origin).toString();
 }
 
 function ensureAdminEnhancements() {
@@ -465,6 +485,16 @@ function bindEvents() {
 }
 
 async function adminApi(action, payload = {}) {
+  const configError = getAdminApiConfigError();
+  if (configError) {
+    console.warn("[exort-admin] API config error.", {
+      action,
+      endpoint: ADMIN_API_URL || "(empty)",
+      configError,
+    });
+    throw new Error(configError);
+  }
+
   const requestPayload = {
     action,
     restaurantSlug: getRestaurantSlug(),
@@ -501,6 +531,9 @@ async function adminApi(action, payload = {}) {
     const message = data?.error || `Admin API error ${response.status}`;
     if ([404, 405, 500, 502, 503].includes(response.status)) {
       console.error("[exort-admin] API endpoint is unavailable.", { action, endpoint: ADMIN_API_URL, status: response.status, data });
+      if (response.status === 405 && isLocalAdminHost()) {
+        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Cloudflare Worker.");
+      }
       throw new Error("Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort.");
     }
     console.warn("[exort-admin] API request was rejected.", { action, endpoint: ADMIN_API_URL, status: response.status, data });
@@ -629,7 +662,7 @@ function syncRestaurantIdentity() {
   el.restaurantInitials.forEach((node) => { node.textContent = initial; });
   document.documentElement.style.setProperty("--brand", state.restaurant.brand || "#2563eb");
   document.querySelectorAll("[data-menu-link]").forEach((link) => {
-    link.href = `/menu-demo?restaurant=${encodeURIComponent(state.restaurant.slug || getRestaurantSlug())}`;
+    link.href = getPublicMenuUrl();
   });
 }
 
@@ -2020,6 +2053,16 @@ async function handleItemSubmit(event) {
 }
 
 async function adminApi(action, payload = {}) {
+  const configError = getAdminApiConfigError();
+  if (configError) {
+    console.warn("[exort-admin] API config error.", {
+      action,
+      endpoint: ADMIN_API_URL || "(empty)",
+      configError,
+    });
+    throw new Error(configError);
+  }
+
   const requestPayload = {
     action,
     restaurantSlug: getRestaurantSlug(),
@@ -2075,6 +2118,9 @@ async function adminApi(action, payload = {}) {
         responseText: rawText,
         data,
       });
+      if (response.status === 405 && isLocalAdminHost()) {
+        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Cloudflare Worker.");
+      }
       throw new Error("Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort.");
     }
 
