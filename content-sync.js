@@ -23,7 +23,8 @@
 
         const numericValue = Number(value);
         const safeValue = Number.isFinite(numericValue) ? numericValue : String(value);
-        const symbol = currency || '₸';
+        const normalizedCurrency = String(currency || '').trim().toUpperCase();
+        const symbol = normalizedCurrency === 'KZT' ? '\u20B8' : (currency || '\u20B8');
 
         if (typeof safeValue === 'number') {
             return new Intl.NumberFormat('ru-RU').format(safeValue) + ' ' + symbol;
@@ -409,4 +410,7 @@
         locale
     };
 })();
+
+
+
 

@@ -319,7 +319,7 @@ function getAdminApiConfigError() {
 }
 
 function getPublicMenuUrl() {
-  return new URL("/menu-ru.html", window.location.origin).toString();
+  return new URL("/menu", window.location.origin).toString();
 }
 
 function ensureAdminEnhancements() {
@@ -2844,3 +2844,4 @@ function openItemDrawer(id = "") {
   state.dirty = false;
   renderDishPreview();
 }
+
