@@ -310,26 +310,17 @@ async function trackAnalyticsEvent(env, slug, body) {
     const menuItemId = eventType === "dish_open"
       ? await resolveAnalyticsContentItemId(env, body.menuItemId)
       : null;
-
-    await supabaseRest(env, "content_items", {
-      method: "POST",
-      body: [{
-        content_type: "analytics_event",
-        section_key: eventType,
-        content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title_ru: menuItemId ? String(menuItemId) : "",
-        title_en: normalizeAnalyticsLanguage(body.language) || "",
-        title_kk: normalizeDeviceType(body.deviceType) || "",
-        description_ru: cleanLimited(body.sessionId, 120) || "",
-        description_en: cleanLimited(body.referrer, 500) || "",
-        description_kk: cleanLimited(body.userAgent, 500) || "",
-        is_active: true,
-        sort_order: Date.now(),
-      }],
-      prefer: "return=minimal",
+    const tracked = await writeAnalyticsEvent(env, slug, {
+      eventType,
+      menuItemId,
+      language: normalizeAnalyticsLanguage(body.language) || "",
+      deviceType: normalizeDeviceType(body.deviceType) || "",
+      sessionId: cleanLimited(body.sessionId, 120) || "",
+      referrer: cleanLimited(body.referrer, 500) || "",
+      userAgent: cleanLimited(body.userAgent, 500) || "",
     });
 
-    return jsonResponse(200, { ok: true, tracked: true });
+    return jsonResponse(200, { ok: true, tracked });
   } catch (error) {
     console.warn("[tekemet-admin-function] analytics tracking skipped", error?.message || error);
     return jsonResponse(200, { ok: true, tracked: false });
@@ -348,7 +339,7 @@ async function getAnalytics(env, slug, range = "today") {
   const selectedStartKey = getRangeStartKey(normalizedRange, todayKey, last7StartKey, last30StartKey, yearStartKey);
   const queryStartKey = normalizedRange === "year" ? yearStartKey : shiftDateKey(last30StartKey, -1);
   const queryStart = dateKeyToUtcDate(queryStartKey);
-  const rawEvents = await getAnalyticsEvents(env, normalizedRange === "all" ? null : queryStart);
+  const rawEvents = await getAnalyticsEvents(env, slug, normalizedRange === "all" ? null : queryStart);
   const events = rawEvents.map((event) => withAnalyticsLocalTime(event, timeZone));
   const selectedEvents = selectedStartKey
     ? events.filter((event) => isEventOnOrAfterLocalDate(event, selectedStartKey))
@@ -438,29 +429,127 @@ async function getContentItem(env, id) {
   return rows[0];
 }
 
-async function getAnalyticsEvents(env, fromDate) {
+async function getAnalyticsEvents(env, slug, fromDate) {
   try {
-    const rows = await supabaseRest(env, "content_items", {
+    const rows = await readAnalyticsEvents(env, slug, fromDate);
+    return rows;
+  } catch (error) {
+    console.warn("[tekemet-admin-function] analytics read skipped", error?.message || error);
+    return [];
+  }
+}
+
+async function writeAnalyticsEvent(env, slug, payload) {
+  const restaurantId = await getRestaurantId(env, slug);
+  const menuAnalyticsPayload = {
+    ...(restaurantId ? { restaurant_id: restaurantId } : {}),
+    event_type: payload.eventType,
+    menu_item_id: payload.menuItemId || null,
+    language: payload.language || null,
+    device_type: payload.deviceType || null,
+    session_id: payload.sessionId || null,
+    user_agent: payload.userAgent || null,
+    referrer: payload.referrer || null,
+  };
+
+  try {
+    await supabaseRest(env, "menu_analytics_events", {
+      method: "POST",
+      body: [menuAnalyticsPayload],
+      prefer: "return=minimal",
+    });
+    return true;
+  } catch (menuAnalyticsError) {
+    try {
+      await supabaseRest(env, "content_items", {
+        method: "POST",
+        body: [{
+          content_type: "analytics_event",
+          section_key: payload.eventType,
+          content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          title_ru: payload.menuItemId ? String(payload.menuItemId) : "",
+          title_en: payload.language || "",
+          title_kk: payload.deviceType || "",
+          description_ru: payload.sessionId || "",
+          description_en: payload.referrer || "",
+          description_kk: payload.userAgent || "",
+          is_active: true,
+          sort_order: Date.now(),
+        }],
+        prefer: "return=minimal",
+      });
+      return true;
+    } catch (contentItemsError) {
+      console.warn("[tekemet-admin-function] analytics write fallback failed", {
+        menuAnalyticsError: menuAnalyticsError?.message || String(menuAnalyticsError),
+        contentItemsError: contentItemsError?.message || String(contentItemsError),
+      });
+      return false;
+    }
+  }
+}
+
+async function readAnalyticsEvents(env, slug, fromDate) {
+  const restaurantId = await getRestaurantId(env, slug);
+
+  try {
+    const rows = await supabaseRest(env, "menu_analytics_events", {
       query: {
-        select: "id,section_key,title_ru,title_en,title_kk,description_ru,created_at",
-        content_type: "eq.analytics_event",
+        select: "id,event_type,menu_item_id,language,device_type,session_id,created_at",
+        ...(restaurantId ? { restaurant_id: `eq.${restaurantId}` } : {}),
         ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
         order: "created_at.desc",
         limit: "10000",
       },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      event_type: row.section_key,
-      menu_item_id: row.title_ru || null,
-      language: row.title_en || null,
-      device_type: row.title_kk || null,
-      session_id: row.description_ru || null,
-      created_at: row.created_at,
-    }));
-  } catch (error) {
-    console.warn("[tekemet-admin-function] analytics read skipped", error?.message || error);
-    return [];
+
+    if (rows.length) {
+      return rows.map((row) => ({
+        id: row.id,
+        event_type: row.event_type,
+        menu_item_id: row.menu_item_id || null,
+        language: row.language || null,
+        device_type: row.device_type || null,
+        session_id: row.session_id || null,
+        created_at: row.created_at,
+      }));
+    }
+  } catch (menuAnalyticsError) {
+    console.warn("[tekemet-admin-function] menu_analytics_events read failed", menuAnalyticsError?.message || menuAnalyticsError);
+  }
+
+  const rows = await supabaseRest(env, "content_items", {
+    query: {
+      select: "id,section_key,title_ru,title_en,title_kk,description_ru,created_at",
+      content_type: "eq.analytics_event",
+      ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
+      order: "created_at.desc",
+      limit: "10000",
+    },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    event_type: row.section_key,
+    menu_item_id: row.title_ru || null,
+    language: row.title_en || null,
+    device_type: row.title_kk || null,
+    session_id: row.description_ru || null,
+    created_at: row.created_at,
+  }));
+}
+
+async function getRestaurantId(env, slug) {
+  try {
+    const rows = await supabaseRest(env, "restaurants", {
+      query: {
+        select: "id",
+        slug: `eq.${sanitizeSlug(slug)}`,
+        limit: "1",
+      },
+    });
+    return rows[0]?.id || null;
+  } catch {
+    return null;
   }
 }
 
