@@ -32,93 +32,176 @@ window.addEventListener('load', function() {
     });
 });
 
-function ensureImageModal() {
-    let overlay = document.getElementById('menuImageModal');
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (match) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[match]));
+}
+
+function getDishModalCopy() {
+    const lang = (document.documentElement.lang || 'ru').toLowerCase();
+    if (lang.startsWith('en')) {
+        return {
+            close: 'Close',
+            details: 'Dish details',
+            weight: 'Weight',
+            calories: 'Calories',
+            spice: 'Spice level'
+        };
+    }
+    if (lang.startsWith('kk')) {
+        return {
+            close: 'Жабу',
+            details: 'Тағам туралы',
+            weight: 'Салмағы',
+            calories: 'Калория',
+            spice: 'Ащылық'
+        };
+    }
+    return {
+        close: 'Закрыть',
+        details: 'О блюде',
+        weight: 'Вес',
+        calories: 'Калории',
+        spice: 'Острота'
+    };
+}
+
+function ensureDishModal() {
+    let overlay = document.getElementById('menuDishModal');
     if (overlay) {
         return overlay;
     }
 
+    const copy = getDishModalCopy();
     overlay = document.createElement('div');
-    overlay.className = 'image-modal-overlay';
-    overlay.id = 'menuImageModal';
+    overlay.className = 'dish-modal-overlay';
+    overlay.id = 'menuDishModal';
     overlay.setAttribute('aria-hidden', 'true');
     overlay.innerHTML = [
-        '<div class="image-modal" role="dialog" aria-modal="true" aria-labelledby="menuImageModalTitle">',
-        '  <button type="button" class="image-modal__close" aria-label="Закрыть просмотр">&times;</button>',
-        '  <img class="image-modal__img" alt="">',
-        '  <p class="image-modal__caption" id="menuImageModalTitle"></p>',
-        '</div>'
+        '<button class="dish-modal__backdrop" type="button" data-close-dish-modal aria-label="' + escapeHtml(copy.close) + '"></button>',
+        '<article class="dish-modal" role="dialog" aria-modal="true" aria-labelledby="menuDishModalTitle">',
+        '  <button type="button" class="dish-modal__close" data-close-dish-modal aria-label="' + escapeHtml(copy.close) + '">&times;</button>',
+        '  <div class="dish-modal__inner" data-dish-modal-content></div>',
+        '</article>'
     ].join('');
     document.body.appendChild(overlay);
     return overlay;
 }
 
-function openImageModal(imageUrl, imageTitle) {
-    if (!imageUrl) {
+function getDishModalItem(contentId) {
+    if (!contentId) {
+        return null;
+    }
+
+    if (window.TekemetContentSync && typeof window.TekemetContentSync.getMenuItem === 'function') {
+        return window.TekemetContentSync.getMenuItem(contentId);
+    }
+
+    return (window.TekemetMenuItemsById || {})[String(contentId)] || null;
+}
+
+function trackDishOpen(item) {
+    if (window.TekemetContentSync && typeof window.TekemetContentSync.trackDishOpen === 'function') {
+        window.TekemetContentSync.trackDishOpen(item);
+    }
+}
+
+function renderDishModalContent(item) {
+    const copy = getDishModalCopy();
+    const meta = [
+        item.weight ? { label: copy.weight, value: item.weight } : null,
+        item.calories ? { label: copy.calories, value: item.calories } : null,
+        item.spice ? { label: copy.spice, value: item.spice } : null
+    ].filter(Boolean);
+    const tags = Array.isArray(item.tags) ? item.tags.filter(Boolean) : [];
+
+    return [
+        item.imageUrl ? '<figure class="dish-modal__media"><img src="' + escapeHtml(item.imageUrl) + '" alt="' + escapeHtml(item.imageAlt || item.title) + '"></figure>' : '',
+        '<div class="dish-modal__body">',
+        item.sectionTitle ? '<p class="dish-modal__kicker">' + escapeHtml(item.sectionTitle) + '</p>' : '',
+        '<h2 id="menuDishModalTitle">' + escapeHtml(item.title) + '</h2>',
+        item.description ? '<p class="dish-modal__description">' + escapeHtml(item.description) + '</p>' : '',
+        (item.price || item.oldPrice) ? [
+            '<div class="dish-modal__price-stack">',
+            item.oldPrice ? '<span class="dish-modal__old-price">' + escapeHtml(item.oldPrice) + '</span>' : '',
+            item.price ? '<strong>' + escapeHtml(item.price) + '</strong>' : '',
+            '</div>'
+        ].join('') : '',
+        meta.length ? '<dl class="dish-modal__meta">' + meta.map((entry) => '<div><dt>' + escapeHtml(entry.label) + '</dt><dd>' + escapeHtml(entry.value) + '</dd></div>').join('') + '</dl>' : '',
+        tags.length ? '<div class="dish-modal__tags">' + tags.map((tag) => '<span>' + escapeHtml(tag) + '</span>').join('') + '</div>' : '',
+        '</div>'
+    ].join('');
+}
+
+function openDishModal(contentId) {
+    const item = getDishModalItem(contentId);
+    if (!item) {
         return;
     }
 
-    const overlay = ensureImageModal();
-    const image = overlay.querySelector('.image-modal__img');
-    const caption = overlay.querySelector('.image-modal__caption');
-
-    image.src = imageUrl;
-    image.alt = imageTitle || 'Фото блюда';
-    caption.textContent = imageTitle || 'Фото блюда';
+    const overlay = ensureDishModal();
+    const content = overlay.querySelector('[data-dish-modal-content]');
+    content.innerHTML = renderDishModalContent(item);
 
     overlay.classList.add('is-open');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('modal-open');
+    trackDishOpen(item);
 }
 
-function closeImageModal() {
-    const overlay = document.getElementById('menuImageModal');
+function isServiceModalOpen() {
+    const modal = document.getElementById('serviceModal');
+    return Boolean(modal && modal.classList.contains('is-open'));
+}
+
+function closeDishModal() {
+    const overlay = document.getElementById('menuDishModal');
     if (!overlay) {
         return;
     }
 
-    const image = overlay.querySelector('.image-modal__img');
-    if (image) {
-        image.src = '';
+    const content = overlay.querySelector('[data-dish-modal-content]');
+    if (content) {
+        content.innerHTML = '';
     }
 
     overlay.classList.remove('is-open');
     overlay.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('modal-open');
+    if (!isServiceModalOpen()) {
+        document.body.classList.remove('modal-open');
+    }
 }
 
 document.addEventListener('click', (event) => {
-    const media = event.target.closest('.menu-item__media--clickable');
-    if (media) {
-        const imageUrl = media.getAttribute('data-image-url');
-        const imageTitle = media.getAttribute('data-image-title');
-        openImageModal(imageUrl, imageTitle);
+    const closeButton = event.target.closest('[data-close-dish-modal]');
+    if (closeButton) {
+        closeDishModal();
         return;
     }
 
-    const overlay = document.getElementById('menuImageModal');
-    if (!overlay || !overlay.classList.contains('is-open')) {
+    const card = event.target.closest('[data-menu-dish-card]');
+    if (!card) {
         return;
     }
 
-    closeImageModal();
+    openDishModal(card.getAttribute('data-content-id'));
 });
 
 document.addEventListener('keydown', (event) => {
-    const overlay = document.getElementById('menuImageModal');
-    if (!overlay || !overlay.classList.contains('is-open')) {
-        return;
-    }
-
     if (event.key === 'Escape') {
-        closeImageModal();
+        closeDishModal();
         return;
     }
 
-    if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('.menu-item__media--clickable')) {
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('[data-menu-dish-card]')) {
         event.preventDefault();
-        const media = event.target.closest('.menu-item__media--clickable');
-        openImageModal(media.getAttribute('data-image-url'), media.getAttribute('data-image-title'));
+        const card = event.target.closest('[data-menu-dish-card]');
+        openDishModal(card.getAttribute('data-content-id'));
     }
 });
 

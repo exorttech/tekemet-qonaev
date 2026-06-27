@@ -3,6 +3,7 @@
     const STORAGE_BUCKET = 'site-assets';
     const MENU_TYPE = 'menu';
     const ROOM_TYPE = 'room';
+    const RESTAURANT_SLUG = 'tekemet-qonaev';
     const locale = (document.documentElement.lang || 'ru').toLowerCase();
     const pageKind = document.body.classList.contains('menu-page') ? MENU_TYPE : ROOM_TYPE;
 
@@ -33,12 +34,96 @@
         return String(safeValue);
     }
 
+    function normalizeOptionalNumber(value) {
+        if (value === null || value === undefined || value === '') {
+            return '';
+        }
+
+        const numericValue = Number(value);
+        return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : '';
+    }
+
+    function parseList(value) {
+        if (!value) {
+            return [];
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((item) => String(item || '').trim()).filter(Boolean);
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return [];
+            }
+
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                    return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+                }
+            } catch (error) {
+                // Plain comma-separated values are supported as a fallback.
+            }
+
+            return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+        }
+
+        return [];
+    }
+
     function localeField(record, baseName) {
         return record[baseName + '_' + locale]
             || record[baseName + '_ru']
             || record[baseName + '_en']
             || record[baseName + '_kk']
             || '';
+    }
+
+    function getSpiceLabel(value) {
+        const normalized = String(value || '').trim();
+        const labels = {
+            mild: { ru: 'Легкая острота', kk: 'Жеңіл ащылық', en: 'Mild spice' },
+            medium: { ru: 'Средняя острота', kk: 'Орташа ащылық', en: 'Medium spice' },
+            hot: { ru: 'Острое', kk: 'Ащы', en: 'Hot' }
+        };
+
+        return labels[normalized]?.[locale] || labels[normalized]?.ru || normalized;
+    }
+
+    function getSectionTitle(sectionKey) {
+        const section = Array.from(document.querySelectorAll('.menu-section'))
+            .find((element) => element.dataset.section === sectionKey);
+        const title = section?.querySelector('.section-title');
+        return title ? title.textContent.trim() : '';
+    }
+
+    function normalizeMenuPopupItem(record, client) {
+        const imageUrl = resolveImageUrl(record, client);
+        const oldPrice = normalizeOptionalNumber(record.old_price);
+        const calories = normalizeOptionalNumber(record.calories);
+        const badge = localeField(record, 'badge');
+        const tags = parseList(record.tags || record.tag_list || record.badges);
+        const spice = getSpiceLabel(record.spice_level);
+        const title = localeField(record, 'title') || 'Блюдо';
+
+        return {
+            id: String(record.id || ''),
+            contentKey: String(record.content_key || ''),
+            sectionKey: String(record.section_key || ''),
+            sectionTitle: getSectionTitle(record.section_key || ''),
+            title,
+            description: localeField(record, 'description'),
+            price: formatPrice(record.price, record.currency),
+            oldPrice: oldPrice ? formatPrice(oldPrice, record.currency) : '',
+            weight: String(record.weight || record.portion || record.volume || '').trim(),
+            calories: calories ? new Intl.NumberFormat('ru-RU').format(calories) + ' ккал' : '',
+            spice,
+            tags: [badge].concat(tags).filter(Boolean),
+            imageUrl,
+            imageAlt: record.image_alt || title
+        };
     }
 
     function resolveImageUrl(record, client) {
@@ -88,6 +173,15 @@
     }
 
     function renderMenuItems(records, client) {
+        const popupItems = {};
+        records.forEach((record) => {
+            const popupItem = normalizeMenuPopupItem(record, client);
+            if (popupItem.id) {
+                popupItems[popupItem.id] = popupItem;
+            }
+        });
+        window.TekemetMenuItemsById = popupItems;
+
         // Group records by section
         const sections = {};
         records.forEach((record) => {
@@ -128,10 +222,10 @@
                             return '<h3 class="menu-drinks-group-title">' + escapeHtml(title) + '</h3>';
                         }
 
-                        let html = '<div class="menu-item' + (hasImage ? ' has-image' : '') + (isTextOnlySection ? ' menu-item--text-only' : '') + '" data-content-id="' + escapeHtml(record.id) + '" data-content-key="' + escapeHtml(record.content_key) + '">';
+                        let html = '<div class="menu-item' + (hasImage ? ' has-image' : '') + (isTextOnlySection ? ' menu-item--text-only' : '') + '" role="button" tabindex="0" data-menu-dish-card data-content-id="' + escapeHtml(record.id) + '" data-content-key="' + escapeHtml(record.content_key) + '">';
 
                         if (!isTextOnlySection) {
-                            html += '<div class="menu-item__media' + (hasImage ? ' menu-item__media--clickable' : '') + '"' + (hasImage ? ' role="button" tabindex="0" data-content-id="' + escapeHtml(record.id) + '" data-image-url="' + escapeHtml(imageUrl) + '" data-image-title="' + escapeHtml(title) + '" aria-label="Открыть фото: ' + escapeHtml(title) + '"' : '') + '>';
+                            html += '<div class="menu-item__media' + (hasImage ? ' menu-item__media--clickable' : '') + '"' + (hasImage ? ' data-content-id="' + escapeHtml(record.id) + '" data-image-url="' + escapeHtml(imageUrl) + '" data-image-title="' + escapeHtml(title) + '"' : '') + '>';
                             if (hasImage) {
                                 html += '<img class="menu-item__image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '" loading="lazy" decoding="async">';
                             } else {
@@ -379,35 +473,52 @@
         return 'desktop';
     }
 
-    function trackMenuEvent(eventType, menuItemId) {
+    function trackMenuEvent(eventType, extra = {}) {
         if (!eventType) return;
+        const payload = (extra && typeof extra === 'object')
+            ? extra
+            : { menuItemId: extra || null };
+
         fetch('/.netlify/functions/tekemet-admin', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'trackAnalyticsEvent',
+                restaurantSlug: RESTAURANT_SLUG,
                 eventType,
-                menuItemId: menuItemId || null,
+                menuItemId: payload.menuItemId || null,
                 language: locale,
                 deviceType: getDeviceType(),
                 sessionId: getAnalyticsSessionId(),
                 userAgent: navigator.userAgent || '',
-                referrer: document.referrer || ''
+                referrer: document.referrer || '',
+                ...payload
             })
         }).catch(() => {});
     }
 
-    document.addEventListener('click', (event) => {
-        const media = event.target.closest('.menu-item__media--clickable');
-        if (!media) return;
-        const item = media.closest('.menu-item');
-        const contentId = media.dataset.contentId || (item && item.dataset.contentId) || '';
-        if (contentId) trackMenuEvent('dish_open', contentId);
-    });
+    function trackDishOpen(itemOrId) {
+        const item = itemOrId && typeof itemOrId === 'object'
+            ? itemOrId
+            : (window.TekemetMenuItemsById || {})[String(itemOrId || '')] || null;
+        const menuItemId = item?.id || itemOrId || null;
+        if (!menuItemId) return;
+
+        trackMenuEvent('dish_open', {
+            menuItemId,
+            dishTitle: item?.title || '',
+            dishCategory: item?.sectionTitle || item?.sectionKey || '',
+            dishPrice: item?.price || '',
+            restaurantSlug: RESTAURANT_SLUG,
+            timestamp: new Date().toISOString()
+        });
+    }
 
     window.TekemetContentSync = {
         refresh: loadAndRender,
-        locale
+        locale,
+        getMenuItem: (id) => (window.TekemetMenuItemsById || {})[String(id || '')] || null,
+        trackDishOpen
     };
 })();
 

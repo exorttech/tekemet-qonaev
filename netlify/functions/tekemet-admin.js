@@ -557,7 +557,7 @@ async function getContentDishNames(env, dishIds) {
   if (!dishIds.length) return {};
   const rows = await supabaseRest(env, "content_items", {
     query: {
-      select: "id,title_ru,title_en,title_kk",
+      select: "id,title_ru,title_en,title_kk,content_key",
       content_type: "eq.menu",
       id: `in.(${dishIds.join(",")})`,
     },
@@ -565,7 +565,7 @@ async function getContentDishNames(env, dishIds) {
 
   return Object.fromEntries(rows.map((row) => [
     row.id,
-    clean(row.title_ru || row.title_en || row.title_kk || "Блюдо"),
+    clean(row.title_ru || row.title_kk || row.title_en || row.content_key || "Блюдо"),
   ]));
 }
 

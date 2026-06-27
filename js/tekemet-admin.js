@@ -379,13 +379,13 @@ function ensureAdminEnhancements() {
   if (categoryForm && !categoryForm.elements.name_kz) {
     const nameInput = categoryForm.elements.name;
     nameInput.name = "name_ru";
-    nameInput.closest("label").childNodes[0].textContent = "Название RU";
+    nameInput.closest("label").childNodes[0].textContent = "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 (\u0440\u0443\u0441.)";
     nameInput.insertAdjacentHTML("afterend", `
-      <span class="field-hint">RU обязательно, KZ/EN можно добавить позже.</span>
+      <span class="field-hint">\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e, \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u044b \u043c\u043e\u0436\u043d\u043e \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u0437\u0436\u0435.</span>
     `);
     categoryForm.querySelector(".field-hint")?.closest("label")?.insertAdjacentHTML("afterend", `
-      <label>Название KZ<input name="name_kz" maxlength="80" autocomplete="off" /></label>
-      <label>Название EN<input name="name_en" maxlength="80" autocomplete="off" /></label>
+      <label>\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 (\u043a\u0430\u0437.)<input name="name_kz" maxlength="80" autocomplete="off" /></label>
+      <label>\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 (\u0430\u043d\u0433\u043b.)<input name="name_en" maxlength="80" autocomplete="off" /></label>
     `);
   }
 }
@@ -598,18 +598,21 @@ function normalizeRestaurant(restaurant) {
 }
 
 function normalizeCategory(category) {
+  const displayName = getCategoryDisplayName(category);
   return {
     id: category.id,
-    name_ru: category.name_ru || category.title_ru || category.name || "Категория",
+    name_ru: category.name_ru || category.title_ru || "",
     name_kz: category.name_kz || category.title_kk || "",
     name_en: category.name_en || category.title_en || "",
-    name: category.name_ru || category.title_ru || category.name || "Категория",
+    name: displayName,
     active: category.is_active !== false,
     sort: Number(category.sort_order || 0),
   };
 }
 
 function normalizeItem(item) {
+  const displayName = getItemDisplayName(item);
+  const displayDescription = getItemDisplayDescription(item);
   return {
     id: item.id,
     restaurant_id: item.restaurant_id,
@@ -621,6 +624,8 @@ function normalizeItem(item) {
     description_ru: item.description_ru || "",
     description_kz: item.description_kz || item.description_kk || "",
     description_en: item.description_en || "",
+    name: displayName,
+    description: displayDescription,
     price: Number(item.price || 0),
     currency: item.currency || "KZT",
     image: item.image_url || "",
@@ -752,9 +757,9 @@ function getAttentionStatus(count, type) {
 
 function renderFilters() {
   const selected = el.categoryFilter.value || "all";
-  el.categoryFilter.innerHTML = `<option value="all">Все категории</option>${state.categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("")}`;
+  el.categoryFilter.innerHTML = `<option value="all">Все категории</option>${state.categories.map((category) => `<option value="${category.id}">${escapeHtml(getCategoryDisplayName(category))}</option>`).join("")}`;
   el.categoryFilter.value = [...el.categoryFilter.options].some((option) => option.value === selected) ? selected : "all";
-  el.itemForm.elements.category_id.innerHTML = state.categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("");
+  el.itemForm.elements.category_id.innerHTML = state.categories.map((category) => `<option value="${category.id}">${escapeHtml(getCategoryDisplayName(category))}</option>`).join("");
 }
 
 function filteredItems() {
@@ -765,7 +770,7 @@ function filteredItems() {
   const translation = el.translationFilter?.value || "all";
 
   return state.items.filter((item) => {
-    const matchesQuery = !query || [item.name_ru, item.name_kz, item.name_en, item.description_ru].join(" ").toLowerCase().includes(query);
+    const matchesQuery = !query || [getItemDisplayName(item), getItemDisplayDescription(item), item.content_key].join(" ").toLowerCase().includes(query);
     const matchesCategory = category === "all" || item.category_id === category;
     const matchesStatus =
       status === "all" ||
@@ -788,7 +793,7 @@ function renderDishes() {
     return `<article class="dish-card ${statusClass !== "active" ? "is-muted" : ""}">
       <div class="dish-visual">${visual(item)}</div>
       <div class="dish-body">
-        <div class="dish-title-row"><h3>${escapeHtml(item.name_ru || "Без названия")}</h3><button type="button" data-edit-item="${item.id}">Изменить</button></div>
+        <div class="dish-title-row"><h3>${escapeHtml(getItemDisplayName(item))}</h3><button type="button" data-edit-item="${item.id}">Изменить</button></div>
         <div class="dish-meta">
           <span>${escapeHtml(categoryName(item.category_id))}</span>
           <button class="stock-control ${isSale ? "is-on" : ""}" type="button" data-toggle-stock="${item.id}" aria-label="${isSale ? "Перевести блюдо в стоп-лист" : "Вернуть блюдо в продажу"}">
@@ -808,7 +813,7 @@ function renderCategories() {
     const count = state.items.filter((item) => item.category_id === category.id).length;
     return `<article class="category-row">
       <span class="drag-handle">⋮⋮</span>
-      <div><strong>${escapeHtml(category.name)}</strong><small>${count} блюд</small></div>
+      <div><strong>${escapeHtml(getCategoryDisplayName(category))}</strong><small>${count} блюд</small></div>
       <button class="stop-switch ${category.active ? "is-on" : ""}" type="button" data-toggle-category="${category.id}" aria-label="Активность категории"></button>
       <div class="row-actions">
         <button type="button" data-move-category="${category.id}" data-direction="-1">↑</button>
@@ -822,8 +827,8 @@ function renderCategories() {
 function renderStopList() {
   const stoppedItems = state.items.filter((item) => item.is_stoplisted || isTemporarilyUnavailable(item));
   el.stopList.innerHTML = stoppedItems.length ? stoppedItems.map((item) => `<article class="stop-row">
-    <div class="dish-placeholder">${escapeHtml((item.name_ru || "?").charAt(0))}</div>
-    <div><strong>${escapeHtml(item.name_ru || "Без названия")}</strong><small>${escapeHtml(categoryName(item.category_id))} · ${formatPrice(item.price, item.currency)}</small></div>
+    <div class="dish-placeholder">${escapeHtml((getItemDisplayName(item).charAt(0) || "?"))}</div>
+    <div><strong>${escapeHtml(getItemDisplayName(item))}</strong><small>${escapeHtml(categoryName(item.category_id))} · ${formatPrice(item.price, item.currency)}</small></div>
     <span class="stop-state">На стопе</span>
     <button class="large-switch" type="button" data-toggle-stock="${item.id}" aria-label="Вернуть блюдо в продажу"></button>
   </article>`).join("") : `<div class="empty-state stop-empty-state">
@@ -932,7 +937,7 @@ function renderPopularDishes(items) {
     ${items.length ? `<div class="analytics-ranked-list">
       ${items.map((item, index) => `<div class="analytics-ranked-row">
         <span>${index + 1}</span>
-        <strong>${escapeHtml(item.title || "Блюдо")}</strong>
+        <strong>${escapeHtml(getAnalyticsDishDisplayName(item))}</strong>
         <em>${formatAnalyticsNumber(item.opens || 0)} ${pluralizeOpen(item.opens || 0)}</em>
         <i style="--value:${getChartFillPercent(item.opens || 0, maxOpens)}%"></i>
       </div>`).join("")}
@@ -971,41 +976,72 @@ function renderDayDetail(detail, range) {
   </article>`;
 }
 
-function renderVisitsByHour(hours) {
-  const normalized = hours.length ? hours : Array.from({ length: 24 }, (_, hour) => ({ hour, visits: 0 }));
-  const max = Math.max(...normalized.map((entry) => entry.visits), 0);
-  return `<article class="analytics-card analytics-card--wide">
-    <div class="analytics-card-head"><div><p class="kicker">Активность</p><h2>Посещения по времени</h2></div></div>
-    <div class="analytics-chart-shell">
-      <div class="analytics-bars" aria-label="Посещения по часам">
-        ${normalized.map((entry) => `<span style="--height:${max ? Math.max(8, Math.round((entry.visits / max) * 100)) : 8}%" title="${entry.hour}:00 - ${entry.visits}"></span>`).join("")}
-      </div>
-      <div class="analytics-time-axis" aria-hidden="true"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
-      ${max ? "" : "<p>График появится после сбора статистики</p>"}
-    </div>
-  </article>`;
-}
-
 function renderHourChart(hours) {
-  const normalized = normalizeHours(hours);
+  const normalized = normalizeWorkingHours(hours);
+  const labels = getWorkingHourAxisLabels();
+  const total = normalized.reduce((sum, entry) => sum + Number(entry.visits || 0), 0);
   const max = Math.max(...normalized.map((entry) => entry.visits), 0);
-  return `<div class="analytics-chart-shell">
-    <div class="analytics-bars" aria-label="Посещения по часам">
-      ${normalized.map((entry) => `<span style="--height:${getChartFillPercent(entry.visits, max)}%" title="${formatHourRange(entry.hour)}&#10;${formatVisitCount(entry.visits)}" aria-label="${formatHourRange(entry.hour)}. ${formatVisitCount(entry.visits)}"></span>`).join("")}
+  const peak = normalized.reduce((best, entry) => (entry.visits > (best?.visits || -1) ? entry : best), null);
+
+  if (!max) {
+    return `<div class="analytics-activity-shell analytics-activity-shell--empty">
+      <div class="analytics-activity-summary">
+        <span class="analytics-activity-note">\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0434\u0438\u0430\u043f\u0430\u0437\u043e\u043d: 07:00 - 24:00</span>
+      </div>
+      <div class="analytics-empty analytics-empty--chart">
+        <strong>\u0414\u0430\u043d\u043d\u044b\u0445 \u043f\u043e \u0440\u0430\u0431\u043e\u0447\u0438\u043c \u0447\u0430\u0441\u0430\u043c \u043f\u043e\u043a\u0430 \u043d\u0435\u0442</strong>
+        <p>\u0413\u0440\u0430\u0444\u0438\u043a \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u043f\u0435\u0440\u0432\u044b\u0445 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u043c\u0435\u043d\u044e \u0438 \u043f\u043e\u043a\u0430\u0436\u0435\u0442, \u0432 \u043a\u0430\u043a\u0438\u0435 \u0447\u0430\u0441\u044b \u0433\u043e\u0441\u0442\u0438 \u043f\u0440\u043e\u044f\u0432\u043b\u044f\u044e\u0442 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u0439 \u0438\u043d\u0442\u0435\u0440\u0435\u0441.</p>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="analytics-activity-shell">
+    <div class="analytics-activity-summary">
+      <span class="analytics-activity-note">\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0434\u0438\u0430\u043f\u0430\u0437\u043e\u043d: 07:00 - 24:00</span>
+      <strong class="analytics-activity-peak">\u041f\u0438\u043a: ${escapeHtml(formatHourRange(peak.hour))} - ${formatVisitCount(peak.visits)}</strong>
     </div>
-    <div class="analytics-period-axis" aria-hidden="true">
-      <span>00:00–06:00</span>
-      <span>06:00–12:00</span>
-      <span>12:00–18:00</span>
-      <span>18:00–24:00</span>
+    <div class="analytics-activity-stage">
+      <div class="analytics-activity-grid" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="analytics-activity-bars" aria-label="\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0447\u0430\u0441\u0430\u043c">
+        ${normalized.map((entry, index) => {
+          const visits = Number(entry.visits || 0);
+          const percent = getWorkingHourShare(visits, total);
+          const isPeak = visits === max && max > 0;
+          const height = getWorkingHourBarHeight(visits, max);
+          return `<button
+            class="analytics-activity-bar ${isPeak ? "is-peak" : visits > 0 ? "is-active" : ""}"
+            type="button"
+            style="--column:${index + 1};--bar-height:${height}%;"
+            aria-label="${escapeHtml(formatHourRange(entry.hour))}. ${formatVisitCount(visits)}. ${percent}% \u043e\u0442 \u043e\u0431\u0449\u0435\u0433\u043e \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u0437\u0430 \u0434\u0435\u043d\u044c.">
+          >
+            <span class="analytics-activity-bar-rail" aria-hidden="true"></span>
+            <span class="analytics-activity-bar-fill" aria-hidden="true"></span>
+            <span class="analytics-activity-tooltip" role="presentation">
+              <strong>${escapeHtml(formatHourRange(entry.hour))}</strong>
+              <em>${formatVisitCount(visits)}</em>
+              <b>${percent}% \u043e\u0442 \u0442\u0440\u0430\u0444\u0438\u043a\u0430 \u0434\u043d\u044f</b>
+            </span>
+          </button>`;
+        }).join("")}
+      </div>
+      <div class="analytics-activity-axis" aria-hidden="true">
+        ${labels.map((label) => `<span class="${label === "24" ? "is-end" : ""}">${label}</span>`).join("")}
+      </div>
     </div>
-    ${max ? "" : `<p class="analytics-period-note">Пока нет посещений за этот период.</p>`}
   </div>`;
 }
 
 function renderVisitsByHour(hours) {
-  return `<article class="analytics-card analytics-card--wide">
-    <div class="analytics-card-head"><div><p class="kicker">Сегодня</p><h2>Посещения по времени</h2></div></div>
+  return `<article class="analytics-card analytics-card--wide analytics-card--activity">
+    <div class="analytics-card-head analytics-card-head--activity">
+      <div>
+        <p class="kicker">\u0421\u0435\u0433\u043e\u0434\u043d\u044f</p>
+        <h2>\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0432\u0440\u0435\u043c\u0435\u043d\u0438</h2>
+        <p class="analytics-card-description">\u0420\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u043f\u043e \u0440\u0430\u0431\u043e\u0447\u0438\u043c \u0447\u0430\u0441\u0430\u043c \u0440\u0435\u0441\u0442\u043e\u0440\u0430\u043d\u0430. \u041f\u0438\u043a \u0438 \u0441\u043f\u0430\u0434 \u0432\u0438\u0434\u043d\u044b \u0441\u0440\u0430\u0437\u0443, \u0431\u0435\u0437 \u043f\u0435\u0440\u0435\u0433\u0440\u0443\u0436\u0435\u043d\u043d\u043e\u0439 \u043d\u043e\u0447\u043d\u043e\u0439 \u0437\u043e\u043d\u044b.</p>
+      </div>
+    </div>
     ${renderHourChart(hours)}
   </article>`;
 }
@@ -1025,7 +1061,6 @@ function renderVisitsByDay(days) {
     </div>
   </article>`;
 }
-
 function renderVisitsByWeek(weeks) {
   const normalizedWeeks = normalizeWeeks(weeks);
   const allDays = normalizedWeeks.flatMap((week) => week.days || []);
@@ -1135,7 +1170,7 @@ function renderPopularDishesToday(items) {
     ${items.length ? `<div class="analytics-ranked-list analytics-ranked-list--compact">
       ${items.slice(0, 5).map((item, index) => `<div class="analytics-ranked-row">
         <span>${index + 1}</span>
-        <strong>${escapeHtml(item.title || "Блюдо")}</strong>
+        <strong>${escapeHtml(getAnalyticsDishDisplayName(item))}</strong>
         <em>${formatAnalyticsNumber(item.opens || 0)} ${pluralizeOpen(item.opens || 0)}</em>
         <i style="--value:${getChartFillPercent(item.opens || 0, maxOpens)}%"></i>
       </div>`).join("")}
@@ -1145,11 +1180,11 @@ function renderPopularDishesToday(items) {
 
 function normalizeEventLabel(label = "") {
   return String(label || "")
-    .replace("РћС‚РєСЂС‹Р»Рё РјРµРЅСЋ", "Открыли меню")
-    .replace("РћС‚РєСЂС‹Р»Рё РєР°СЂС‚РѕС‡РєСѓ", "Открыли карточку")
-    .replace("РЎРјРµРЅРёР»Рё СЏР·С‹Рє РЅР°", "Сменили язык на")
-    .replace("Р±Р»СЋРґР°", "блюда")
-    .replace("РґСЂСѓРіРѕР№", "другой");
+    .replace("Открыли меню", "Открыли меню")
+    .replace("Открыли карточку", "Открыли карточку")
+    .replace("Сменили язык на", "Сменили язык на")
+    .replace("блюда", "блюда")
+    .replace("другой", "другой");
 }
 
 function getAnalyticsRangeLabel(range = "7d") {
@@ -1173,8 +1208,33 @@ function normalizeHours(hours) {
   }));
 }
 
+function normalizeWorkingHours(hours) {
+  return normalizeHours(hours).filter((entry) => entry.hour >= 7);
+}
+
+function getWorkingHourAxisLabels() {
+  return Array.from({ length: 18 }, (_, index) => String(index + 7).padStart(2, "0"));
+}
+
+function getWorkingHourBarHeight(value, max) {
+  const numericValue = Number(value || 0);
+  const numericMax = Number(max || 0);
+  if (!numericValue || !numericMax) return 0;
+  return Math.max(14, Math.round(Math.pow(numericValue / numericMax, 0.82) * 100));
+}
+
+function getWorkingHourShare(value, total) {
+  const numericTotal = Number(total || 0);
+  if (!numericTotal) return 0;
+  return Math.round((Number(value || 0) / numericTotal) * 100);
+}
+
 function normalizeLastDays(days, count) {
-  const byDate = Object.fromEntries((days || []).filter((entry) => entry.date).map((entry) => [entry.date, entry]));
+  const byDate = Object.fromEntries(
+    (days || [])
+      .filter((entry) => entry?.date)
+      .map((entry) => [entry.date, entry]),
+  );
   const endKey = getAlmatyDateKey();
   const startKey = shiftDateKeyClient(endKey, -(count - 1));
   return Array.from({ length: count }, (_, index) => {
@@ -1271,9 +1331,11 @@ function formatDateLabelClient(dateKey) {
 }
 
 function formatHourRange(hour) {
-  const current = String(Number(hour || 0)).padStart(2, "0");
-  const next = String((Number(hour || 0) + 1) % 24).padStart(2, "0");
-  return `${current}:00–${next}:00`;
+  const currentHour = Number(hour || 0);
+  const current = String(currentHour).padStart(2, "0");
+  const nextHour = currentHour + 1;
+  const next = String(nextHour === 24 ? 24 : nextHour % 24).padStart(2, "0");
+  return `${current}:00 - ${next}:00`;
 }
 
 function formatDateTooltip(entry = {}) {
@@ -1298,7 +1360,7 @@ function formatVisitCount(count) {
 }
 
 function visual(item) {
-  return item.image ? `<img src="${escapeHtml(item.image)}" alt="" />` : `<div class="dish-placeholder">${escapeHtml((item.name_ru || "?").charAt(0))}</div>`;
+  return item.image ? `<img src="${escapeHtml(item.image)}" alt="" />` : `<div class="dish-placeholder">${escapeHtml((getItemDisplayName(item) || "?").charAt(0))}</div>`;
 }
 
 function status(item) {
@@ -1317,9 +1379,9 @@ function hasMissingTranslation(item) {
 }
 
 function categoryName(id) {
-  return state.categories.find((category) => category.id === id)?.name || "Без категории";
+  const category = state.categories.find((entry) => entry.id === id);
+  return getCategoryDisplayName(category);
 }
-
 function formatPrice(value, currency = "KZT") {
   const symbol = currency === "KZT" ? "₸" : currency;
   return `${new Intl.NumberFormat("ru-KZ").format(Number(value) || 0)} ${symbol}`;
@@ -1623,7 +1685,7 @@ async function handleBulkUploads(files) {
       const imageData = await prepareImage(file);
       const result = await adminApi("uploadItemPhoto", { itemId: targets[index].id, imageData });
       upsertLocalItem(result.item);
-      toast(`Фото добавлено: ${result.item.name_ru || targets[index].name_ru}`, "success");
+      toast(`\u0424\u043e\u0442\u043e \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e: ${getItemDisplayName(result.item || targets[index])}`, "success");
     } catch (error) {
       toast(error.message || "Не удалось загрузить фото", "danger");
     }
@@ -1792,6 +1854,65 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function firstFilledValue(...values) {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function getItemDisplayName(item) {
+  return firstFilledValue(
+    item?.name_ru,
+    item?.title_ru,
+    item?.name_kz,
+    item?.title_kk,
+    item?.name_en,
+    item?.title_en,
+    item?.content_key,
+    item?.id,
+  ) || "Без названия";
+}
+
+function getItemDisplayDescription(item) {
+  return firstFilledValue(
+    item?.description_ru,
+    item?.description_kz,
+    item?.description_kk,
+    item?.description_en,
+  );
+}
+
+function getCategoryDisplayName(category) {
+  return firstFilledValue(
+    category?.name_ru,
+    category?.title_ru,
+    category?.name_kz,
+    category?.title_kk,
+    category?.name_en,
+    category?.title_en,
+    category?.name,
+    category?.section_key,
+    category?.id,
+  ) || "Без категории";
+}
+
+function getAnalyticsDishDisplayName(item) {
+  return firstFilledValue(
+    item?.title_ru,
+    item?.name_ru,
+    item?.title_kk,
+    item?.name_kz,
+    item?.title_en,
+    item?.name_en,
+    item?.title,
+    item?.name,
+    item?.content_key,
+    item?.id,
+  ) || "Блюдо";
+}
+
 function getNextMidnightIso() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
@@ -1894,11 +2015,11 @@ function ensureAdminEnhancements() {
     const nameInput = categoryForm.elements.name;
     if (nameInput) {
       nameInput.name = "name_ru";
-      nameInput.closest("label").childNodes[0].textContent = "Название RU";
-      nameInput.insertAdjacentHTML("afterend", `<span class="field-hint">RU обязательно, KZ/EN можно добавить позже.</span>`);
+      nameInput.closest("label").childNodes[0].textContent = "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 (\u0440\u0443\u0441.)";
+      nameInput.insertAdjacentHTML("afterend", `<span class="field-hint">\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e, \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u044b \u043c\u043e\u0436\u043d\u043e \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u0437\u0436\u0435.</span>`);
       categoryForm.querySelector(".field-hint")?.closest("label")?.insertAdjacentHTML("afterend", `
-        <label>Название KZ<input name="name_kz" maxlength="80" autocomplete="off" /></label>
-        <label>Название EN<input name="name_en" maxlength="80" autocomplete="off" /></label>
+        <label>\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 (\u043a\u0430\u0437.)<input name="name_kz" maxlength="80" autocomplete="off" /></label>
+        <label>\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 (\u0430\u043d\u0433\u043b.)<input name="name_en" maxlength="80" autocomplete="off" /></label>
       `);
     }
   }
@@ -1948,7 +2069,7 @@ function renderDishes() {
     return `<article class="dish-card ${statusClass !== "active" ? "is-muted" : ""}">
       <div class="dish-visual">${visual(item)}</div>
       <div class="dish-body">
-        <div class="dish-title-row"><h3>${escapeHtml(item.name_ru || "Без названия")}</h3><button type="button" data-edit-item="${item.id}">Изменить</button></div>
+        <div class="dish-title-row"><h3>${escapeHtml(getItemDisplayName(item))}</h3><button type="button" data-edit-item="${item.id}">Изменить</button></div>
         <div class="dish-meta">
           <span>${escapeHtml(categoryName(item.category_id))}</span>
           <button class="stock-control ${isSale ? "is-on" : ""}" type="button" data-toggle-stock="${item.id}" aria-label="${isSale ? "Перевести блюдо в стоп-лист" : "Вернуть блюдо в продажу"}">
@@ -2467,9 +2588,11 @@ function scheduleAutoTranslateFromRu() {
 }
 
 function getLocalizedEditorValue(field, language = getPreviewLanguage()) {
-  const direct = el.itemForm?.elements[`${field}_${language}`]?.value?.trim();
-  const fallback = el.itemForm?.elements[`${field}_ru`]?.value?.trim();
-  return direct || fallback || "";
+  return firstFilledValue(
+    el.itemForm?.elements[`${field}_ru`]?.value?.trim(),
+    el.itemForm?.elements[`${field}_kz`]?.value?.trim(),
+    el.itemForm?.elements[`${field}_en`]?.value?.trim()
+  );
 }
 
 function getEditorPreviewItem() {
