@@ -9,15 +9,25 @@ const DEFAULT_RESTAURANT_SLUG = "tekemet-qonaev";
 const DEFAULT_RESTAURANT_TIME_ZONE = "Asia/Almaty";
 const DEFAULT_SECTION_ORDER = ["hotel-breakfasts", "breakfast", "salads", "appetizers", "mains", "sides", "drinks"];
 const SECTION_LABELS_RU = {
-  "hotel-breakfasts": "Завтраки Отеля",
-  breakfast: "Завтраки",
-  salads: "Салаты",
-  appetizers: "Закуски",
-  mains: "Основные блюда",
-  sides: "Гарниры",
-  drinks: "Напитки",
+  "hotel-breakfasts": "\u0417\u0430\u0432\u0442\u0440\u0430\u043a\u0438 \u043e\u0442\u0435\u043b\u044f",
+  "hotel-breakfast": "\u0417\u0430\u0432\u0442\u0440\u0430\u043a\u0438 \u043e\u0442\u0435\u043b\u044f",
+  breakfast: "\u0417\u0430\u0432\u0442\u0440\u0430\u043a\u0438",
+  salads: "\u0421\u0430\u043b\u0430\u0442\u044b",
+  appetizers: "\u0417\u0430\u043a\u0443\u0441\u043a\u0438",
+  starters: "\u0417\u0430\u043a\u0443\u0441\u043a\u0438",
+  mains: "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0431\u043b\u044e\u0434\u0430",
+  main: "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0431\u043b\u044e\u0434\u0430",
+  "main-courses": "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0431\u043b\u044e\u0434\u0430",
+  sides: "\u0413\u0430\u0440\u043d\u0438\u0440\u044b",
+  drinks: "\u041d\u0430\u043f\u0438\u0442\u043a\u0438",
+  bakery: "\u0412\u044b\u043f\u0435\u0447\u043a\u0430",
+  desserts: "\u0414\u0435\u0441\u0435\u0440\u0442\u044b",
+  dishware: "\u041f\u043e\u0441\u0443\u0434\u0430",
+  hero: "\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0431\u043b\u043e\u043a",
+  kids: "\u0414\u0435\u0442\u0441\u043a\u043e\u0435 \u043c\u0435\u043d\u044e",
+  sharing: "\u0414\u043b\u044f \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438",
+  soups: "\u0421\u0443\u043f\u044b",
 };
-
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -308,11 +318,16 @@ async function trackAnalyticsEvent(env, slug, body) {
     if (!eventType) return jsonResponse(200, { ok: true, tracked: false });
 
     const menuItemId = eventType === "dish_open"
-      ? await resolveAnalyticsContentItemId(env, body.menuItemId)
+      ? await resolveAnalyticsContentItemId(env, body.menuItemId || body.itemId || body.dishId, body.contentKey || body.content_key)
       : null;
     const tracked = await writeAnalyticsEvent(env, slug, {
       eventType,
       menuItemId,
+      contentKey: cleanLimited(body.contentKey || body.content_key, 160) || "",
+      dishTitle: cleanLimited(body.dishTitleRu || body.dish_title_ru || body.title_ru || body.name_ru || body.dishTitle, 240) || "",
+      sectionKey: cleanLimited(body.sectionKey || body.section_key || body.categoryId || body.category_id, 120) || "",
+      price: cleanLimited(body.price || body.dishPrice, 80) || "",
+      currency: cleanLimited(body.currency, 16) || "",
       language: normalizeAnalyticsLanguage(body.language) || "",
       deviceType: normalizeDeviceType(body.deviceType) || "",
       sessionId: cleanLimited(body.sessionId, 120) || "",
@@ -381,11 +396,11 @@ async function getAnalytics(env, slug, range = "today") {
       },
       averageViewTime: null,
       popularDishes: dishIds
-        .map((id) => ({ id, title: dishNames[id] || "Блюдо", opens: dishCounts[id] }))
+        .map((id) => ({ id, title: dishNames[id] || getAnalyticsDishFallbackTitle(id), opens: dishCounts[id] }))
         .sort((a, b) => b.opens - a.opens)
         .slice(0, 10),
       popularDishesToday: Object.keys(todayDishCounts)
-        .map((id) => ({ id, title: dishNames[id] || "Блюдо", opens: todayDishCounts[id] }))
+        .map((id) => ({ id, title: dishNames[id] || getAnalyticsDishFallbackTitle(id), opens: todayDishCounts[id] }))
         .sort((a, b) => b.opens - a.opens)
         .slice(0, 5),
       visitsByHour: buildVisitsByHour(events.filter((event) => (
@@ -466,13 +481,13 @@ async function writeAnalyticsEvent(env, slug, payload) {
         body: [{
           content_type: "analytics_event",
           section_key: payload.eventType,
-          content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          content_key: payload.contentKey || `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           title_ru: payload.menuItemId ? String(payload.menuItemId) : "",
           title_en: payload.language || "",
           title_kk: payload.deviceType || "",
           description_ru: payload.sessionId || "",
-          description_en: payload.referrer || "",
-          description_kk: payload.userAgent || "",
+          description_en: payload.dishTitle || payload.referrer || "",
+          description_kk: payload.sectionKey || payload.userAgent || "",
           is_active: true,
           sort_order: Date.now(),
         }],
@@ -520,7 +535,7 @@ async function readAnalyticsEvents(env, slug, fromDate) {
 
   const rows = await supabaseRest(env, "content_items", {
     query: {
-      select: "id,section_key,title_ru,title_en,title_kk,description_ru,created_at",
+      select: "id,section_key,content_key,title_ru,title_en,title_kk,description_ru,description_en,description_kk,created_at",
       content_type: "eq.analytics_event",
       ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
       order: "created_at.desc",
@@ -530,7 +545,10 @@ async function readAnalyticsEvents(env, slug, fromDate) {
   return rows.map((row) => ({
     id: row.id,
     event_type: row.section_key,
-    menu_item_id: row.title_ru || null,
+    menu_item_id: row.title_ru || (String(row.content_key || "").startsWith("analytics-") ? row.description_en : row.content_key) || null,
+    content_key: row.content_key || null,
+    dish_title: row.description_en || null,
+    section_key: row.description_kk || null,
     language: row.title_en || null,
     device_type: row.title_kk || null,
     session_id: row.description_ru || null,
@@ -555,37 +573,81 @@ async function getRestaurantId(env, slug) {
 
 async function getContentDishNames(env, dishIds) {
   if (!dishIds.length) return {};
-  const rows = await supabaseRest(env, "content_items", {
-    query: {
-      select: "id,title_ru,title_en,title_kk,content_key",
-      content_type: "eq.menu",
-      id: `in.(${dishIds.join(",")})`,
-    },
-  });
+  const databaseIds = dishIds.filter((id) => isDatabaseId(id));
+  const contentKeys = dishIds.filter((id) => !isDatabaseId(id)).map((id) => clean(id)).filter(Boolean);
+  const rows = [];
 
-  return Object.fromEntries(rows.map((row) => [
-    row.id,
-    clean(row.title_ru || row.title_kk || row.title_en || row.content_key || "Блюдо"),
-  ]));
-}
-
-async function resolveAnalyticsContentItemId(env, menuItemId) {
-  if (!isDatabaseId(menuItemId)) return null;
-  try {
-    const rows = await supabaseRest(env, "content_items", {
+  if (databaseIds.length) {
+    rows.push(...await supabaseRest(env, "content_items", {
       query: {
-        select: "id",
+        select: "id,title_ru,title_en,title_kk,content_key",
         content_type: "eq.menu",
-        id: `eq.${menuItemId}`,
+        id: `in.(${databaseIds.join(",")})`,
+      },
+    }));
+  }
+
+  for (const contentKey of contentKeys) {
+    const found = await supabaseRest(env, "content_items", {
+      query: {
+        select: "id,title_ru,title_en,title_kk,content_key",
+        content_type: "eq.menu",
+        content_key: `eq.${contentKey}`,
         limit: "1",
       },
     });
-    return rows[0]?.id || null;
+    rows.push(...found);
+  }
+
+  return rows.reduce((acc, row) => {
+    const name = clean(row.title_ru || row.title_kk || row.title_en || row.content_key || "\u0411\u043b\u044e\u0434\u043e \u0431\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f");
+    acc[row.id] = name;
+    if (row.content_key) acc[row.content_key] = name;
+    return acc;
+  }, {});
+}
+
+function getAnalyticsDishFallbackTitle(value) {
+  const normalized = clean(value);
+  if (!normalized || isDatabaseId(normalized) || normalized.startsWith("analytics-")) {
+    return "\u0411\u043b\u044e\u0434\u043e \u0431\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f";
+  }
+  return normalized;
+}
+
+async function resolveAnalyticsContentItemId(env, menuItemId, contentKey = "") {
+  const normalizedId = clean(menuItemId);
+  const normalizedContentKey = clean(contentKey || (!isDatabaseId(normalizedId) ? normalizedId : ""));
+  try {
+    if (isDatabaseId(normalizedId)) {
+      const rows = await supabaseRest(env, "content_items", {
+        query: {
+          select: "id",
+          content_type: "eq.menu",
+          id: `eq.${normalizedId}`,
+          limit: "1",
+        },
+      });
+      if (rows[0]?.id) return rows[0].id;
+    }
+
+    if (normalizedContentKey) {
+      const rows = await supabaseRest(env, "content_items", {
+        query: {
+          select: "id",
+          content_type: "eq.menu",
+          content_key: `eq.${normalizedContentKey}`,
+          limit: "1",
+        },
+      });
+      return rows[0]?.id || null;
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
-
 function getVirtualRestaurant(slug) {
   return {
     id: slug,
@@ -642,7 +704,25 @@ function buildContentCategories(items) {
 
 function normalizeVirtualCategory(category) {
   const id = sanitizeSectionKey(category.id || category.section_key || category.name_ru || category.name || "section");
-  const name = clean(category.name_ru || category.name || SECTION_LABELS_RU[id] || titleizeSection(id));
+  const name = clean(
+    category.name_ru ||
+    category.title_ru ||
+    category.label_ru ||
+    category.section_title_ru ||
+    category.category_title_ru ||
+    category.category_name_ru ||
+    SECTION_LABELS_RU[id] ||
+    category.name_kk ||
+    category.title_kk ||
+    category.label_kk ||
+    category.name_kz ||
+    category.title_kz ||
+    category.label_kz ||
+    category.name_en ||
+    category.title_en ||
+    category.label_en ||
+    titleizeSection(id)
+  );
   return {
     id,
     section_key: id,
@@ -672,11 +752,7 @@ function getSectionSort(sectionKey) {
 }
 
 function titleizeSection(sectionKey) {
-  return String(sectionKey || "section")
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return String(sectionKey || "section").trim() || "section";
 }
 async function uploadImage(env, slug, filename, dataUrl) {
   const match = String(dataUrl || "").match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -1314,9 +1390,12 @@ function buildAllTimeSummary(events, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
 
 function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
   return events.map((event) => {
-    let label = "Открыли меню";
-    if (event.event_type === "dish_open") label = `Открыли карточку ${dishNames[event.menu_item_id] || "блюда"}`;
-    if (event.event_type === "language_change") label = `Сменили язык на ${String(event.language || "").toUpperCase() || "другой"}`;
+    let label = "\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u043c\u0435\u043d\u044e";
+    if (event.event_type === "dish_open") {
+      const dishName = dishNames[event.menu_item_id] || dishNames[event.content_key] || event.dish_title || getAnalyticsDishFallbackTitle(event.menu_item_id || event.content_key);
+      label = `\u041e\u0442\u043a\u0440\u044b\u0442\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u0431\u043b\u044e\u0434\u0430: ${dishName}`;
+    }
+    if (event.event_type === "language_change") label = `\u0421\u043c\u0435\u043d\u0438\u043b\u0438 \u044f\u0437\u044b\u043a \u043d\u0430 ${String(event.language || "").toUpperCase() || "\u0434\u0440\u0443\u0433\u043e\u0439"}`;
     return {
       type: event.event_type,
       label,
@@ -1325,7 +1404,6 @@ function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME
     };
   });
 }
-
 function getTimeZoneParts(value, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,

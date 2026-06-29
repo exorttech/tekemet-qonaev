@@ -77,6 +77,27 @@ Object.assign(viewMeta, {
   analytics: ["Аналитика", "Поведение гостей и эффективность меню"],
 });
 
+const CATEGORY_LABELS_RU = {
+  "hotel-breakfasts": "\u0417\u0430\u0432\u0442\u0440\u0430\u043a\u0438 \u043e\u0442\u0435\u043b\u044f",
+  "hotel-breakfast": "\u0417\u0430\u0432\u0442\u0440\u0430\u043a\u0438 \u043e\u0442\u0435\u043b\u044f",
+  breakfast: "\u0417\u0430\u0432\u0442\u0440\u0430\u043a\u0438",
+  salads: "\u0421\u0430\u043b\u0430\u0442\u044b",
+  appetizers: "\u0417\u0430\u043a\u0443\u0441\u043a\u0438",
+  starters: "\u0417\u0430\u043a\u0443\u0441\u043a\u0438",
+  mains: "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0431\u043b\u044e\u0434\u0430",
+  main: "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0431\u043b\u044e\u0434\u0430",
+  "main-courses": "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0431\u043b\u044e\u0434\u0430",
+  sides: "\u0413\u0430\u0440\u043d\u0438\u0440\u044b",
+  drinks: "\u041d\u0430\u043f\u0438\u0442\u043a\u0438",
+  bakery: "\u0412\u044b\u043f\u0435\u0447\u043a\u0430",
+  desserts: "\u0414\u0435\u0441\u0435\u0440\u0442\u044b",
+  dishware: "\u041f\u043e\u0441\u0443\u0434\u0430",
+  hero: "\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0431\u043b\u043e\u043a",
+  kids: "\u0414\u0435\u0442\u0441\u043a\u043e\u0435 \u043c\u0435\u043d\u044e",
+  sharing: "\u0414\u043b\u044f \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438",
+  soups: "\u0421\u0443\u043f\u044b",
+};
+
 init();
 
 function getRestaurantSlug() {
@@ -601,7 +622,8 @@ function normalizeCategory(category) {
   const displayName = getCategoryDisplayName(category);
   return {
     id: category.id,
-    name_ru: category.name_ru || category.title_ru || "",
+    section_key: category.section_key || category.id,
+    name_ru: category.name_ru || category.title_ru || displayName,
     name_kz: category.name_kz || category.title_kk || "",
     name_en: category.name_en || category.title_en || "",
     name: displayName,
@@ -1380,7 +1402,7 @@ function hasMissingTranslation(item) {
 
 function categoryName(id) {
   const category = state.categories.find((entry) => entry.id === id);
-  return getCategoryDisplayName(category);
+  return category ? getCategoryDisplayName(category) : (getKnownCategoryRuLabel(id) || String(id || ""));
 }
 function formatPrice(value, currency = "KZT") {
   const symbol = currency === "KZT" ? "₸" : currency;
@@ -1862,6 +1884,24 @@ function firstFilledValue(...values) {
   return "";
 }
 
+function normalizeCategoryLookupKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getKnownCategoryRuLabel(...values) {
+  for (const value of values) {
+    const key = normalizeCategoryLookupKey(value);
+    if (key && CATEGORY_LABELS_RU[key]) return CATEGORY_LABELS_RU[key];
+  }
+  return "";
+}
+
 function getItemDisplayName(item) {
   return firstFilledValue(
     item?.name_ru,
@@ -1885,19 +1925,49 @@ function getItemDisplayDescription(item) {
 }
 
 function getCategoryDisplayName(category) {
-  return firstFilledValue(
+  const ruDisplay = firstFilledValue(
     category?.name_ru,
     category?.title_ru,
-    category?.name_kz,
-    category?.title_kk,
+    category?.label_ru,
+    category?.section_title_ru,
+    category?.category_title_ru,
+    category?.category_name_ru,
+  );
+  const normalizedRuDisplay = getKnownCategoryRuLabel(ruDisplay) || ruDisplay;
+  const knownRuLabel = getKnownCategoryRuLabel(
+    category?.section_key,
+    category?.category_key,
+    category?.id,
+    category?.name,
+    category?.title,
+    category?.label,
     category?.name_en,
     category?.title_en,
+    category?.label_en,
+  );
+
+  return firstFilledValue(
+    normalizedRuDisplay,
+    knownRuLabel,
+    category?.name_kz,
+    category?.title_kk,
+    category?.label_kk,
+    category?.name_kk,
+    category?.section_title_kk,
+    category?.category_title_kk,
+    category?.category_name_kk,
+    category?.name_en,
+    category?.title_en,
+    category?.label_en,
+    category?.section_title_en,
+    category?.category_title_en,
+    category?.category_name_en,
     category?.name,
     category?.section_key,
+    category?.category_key,
     category?.id,
-  ) || "Без категории";
+  ) || "\u0411\u0435\u0437 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438";
 }
-
 function getAnalyticsDishDisplayName(item) {
   return firstFilledValue(
     item?.title_ru,

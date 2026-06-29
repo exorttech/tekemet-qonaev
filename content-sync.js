@@ -114,8 +114,11 @@
             sectionKey: String(record.section_key || ''),
             sectionTitle: getSectionTitle(record.section_key || ''),
             title,
+            titleRu: record.title_ru || record.title_kk || record.title_en || record.content_key || '',
             description: localeField(record, 'description'),
             price: formatPrice(record.price, record.currency),
+            rawPrice: record.price ?? '',
+            currency: record.currency || 'KZT',
             oldPrice: oldPrice ? formatPrice(oldPrice, record.currency) : '',
             weight: String(record.weight || record.portion || record.volume || '').trim(),
             calories: calories ? new Intl.NumberFormat('ru-RU').format(calories) + ' ккал' : '',
@@ -466,6 +469,44 @@
         return value;
     }
 
+    function getAnalyticsVisitorId() {
+        const key = 'tekemet.analytics.visitor';
+        let value = localStorage.getItem(key);
+        if (!value) {
+            value = 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+            localStorage.setItem(key, value);
+        }
+        return value;
+    }
+
+    function getUrlParam(name) {
+        try {
+            return new URLSearchParams(window.location.search).get(name) || '';
+        } catch {
+            return '';
+        }
+    }
+
+    function getBrowserName() {
+        const agent = navigator.userAgent || '';
+        if (/Edg\//.test(agent)) return 'Edge';
+        if (/OPR\//.test(agent)) return 'Opera';
+        if (/Chrome\//.test(agent)) return 'Chrome';
+        if (/Safari\//.test(agent) && !/Chrome\//.test(agent)) return 'Safari';
+        if (/Firefox\//.test(agent)) return 'Firefox';
+        return '';
+    }
+
+    function getOsName() {
+        const agent = navigator.userAgent || '';
+        if (/Windows/i.test(agent)) return 'Windows';
+        if (/Android/i.test(agent)) return 'Android';
+        if (/iPhone|iPad|iPod/i.test(agent)) return 'iOS';
+        if (/Mac OS X/i.test(agent)) return 'macOS';
+        if (/Linux/i.test(agent)) return 'Linux';
+        return '';
+    }
+
     function getDeviceType() {
         const width = window.innerWidth || document.documentElement.clientWidth || 0;
         if (width < 768) return 'mobile';
@@ -490,6 +531,12 @@
                 language: locale,
                 deviceType: getDeviceType(),
                 sessionId: getAnalyticsSessionId(),
+                visitorId: getAnalyticsVisitorId(),
+                pagePath: window.location.pathname || '/menu',
+                browser: getBrowserName(),
+                os: getOsName(),
+                qrCode: getUrlParam('qr') || getUrlParam('table'),
+                source: getUrlParam('source') || getUrlParam('utm_source'),
                 userAgent: navigator.userAgent || '',
                 referrer: document.referrer || '',
                 ...payload
@@ -506,9 +553,16 @@
 
         trackMenuEvent('dish_open', {
             menuItemId,
-            dishTitle: item?.title || '',
+            itemId: menuItemId,
+            dishId: menuItemId,
+            contentKey: item?.contentKey || '',
+            dishTitle: item?.titleRu || item?.title || '',
+            dishTitleRu: item?.titleRu || item?.title || '',
             dishCategory: item?.sectionTitle || item?.sectionKey || '',
-            dishPrice: item?.price || '',
+            sectionKey: item?.sectionKey || '',
+            dishPrice: item?.rawPrice || item?.price || '',
+            price: item?.rawPrice || item?.price || '',
+            currency: item?.currency || 'KZT',
             restaurantSlug: RESTAURANT_SLUG,
             timestamp: new Date().toISOString()
         });
