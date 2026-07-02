@@ -99,6 +99,7 @@ async function handleRequest(request, env) {
       if (action === "deleteItem") return deleteItem(env, restaurantSlug, body.itemId);
       if (action === "toggleStock") return toggleStock(env, restaurantSlug, body.itemId, body.is_stoplisted);
       if (action === "uploadItemPhoto") return uploadItemPhoto(env, restaurantSlug, body.itemId, body.imageData);
+      if (action === "uploadMenuHeroPhoto") return uploadMenuHeroPhoto(env, restaurantSlug, body.imageData);
       if (action === "saveCategory") return saveCategory(env, restaurantSlug, body.category);
       if (action === "sortCategories") return sortCategories(env, restaurantSlug, body.categories || []);
       if (action === "getAnalytics") return getAnalytics(env, restaurantSlug, body.range || "today");
@@ -140,15 +141,25 @@ async function getPublicContent(env, contentType) {
     },
   });
 
-  return jsonResponse(200, { items });
+  return jsonResponse(200, {
+    items: items.filter((item) => !isMenuHeroContentItem(item)),
+    menuHero: items.find(isMenuHeroContentItem) || null,
+  });
 }
 
 async function buildAdminData(env, slug) {
   const contentItems = await getMenuContentItems(env);
-  const categories = buildContentCategories(contentItems);
-  const items = contentItems.map(mapContentItemToAdminItem);
+  const menuHero = contentItems.find(isMenuHeroContentItem) || null;
+  const dishItems = contentItems.filter((item) => !isMenuHeroContentItem(item));
+  const categories = buildContentCategories(dishItems);
+  const items = dishItems.map(mapContentItemToAdminItem);
 
-  return { restaurant: getVirtualRestaurant(slug), categories, items };
+  return {
+    restaurant: getVirtualRestaurant(slug),
+    categories,
+    items,
+    menuHero: menuHero ? mapContentItemToAdminItem(menuHero) : null,
+  };
 }
 
 async function saveItem(env, slug, item) {
@@ -242,6 +253,43 @@ async function uploadItemPhoto(env, slug, itemId, imageData) {
   return jsonResponse(200, { item: mapContentItemToAdminItem(rows[0]) });
 }
 
+async function uploadMenuHeroPhoto(env, slug, imageData) {
+  const current = await getMenuHeroContentItem(env);
+  const image = await uploadImage(
+    env,
+    slug,
+    `menu-hero/menu-hero-${Date.now()}.webp`,
+    imageData,
+  );
+
+  const payload = {
+    content_type: "menu",
+    section_key: current?.section_key || "hero",
+    content_key: current?.content_key || "menu_hero",
+    title_ru: current?.title_ru || "Menu hero",
+    title_kk: current?.title_kk || "",
+    title_en: current?.title_en || "",
+    description_ru: current?.description_ru || "",
+    description_kk: current?.description_kk || "",
+    description_en: current?.description_en || "",
+    currency: current?.currency || "KZT",
+    is_active: true,
+    sort_order: Number(current?.sort_order || 0),
+    ...image,
+  };
+
+  const rows = await supabaseRest(env, "content_items", {
+    method: current ? "PATCH" : "POST",
+    query: current
+      ? { id: `eq.${current.id}`, content_type: "eq.menu", select: "*" }
+      : { select: "*" },
+    body: current ? payload : [payload],
+    prefer: "return=representation",
+  });
+
+  return jsonResponse(200, { menuHero: mapContentItemToAdminItem(Array.isArray(rows) ? rows[0] : rows) });
+}
+
 async function saveCategory(env, slug, category) {
   if (!category || !String(category.name_ru || category.name || "").trim()) {
     throw new Error("RU category name is required.");
@@ -317,7 +365,7 @@ async function trackAnalyticsEvent(env, slug, body) {
     const eventType = normalizeEventType(body.eventType);
     if (!eventType) return jsonResponse(200, { ok: true, tracked: false });
 
-    const menuItemId = eventType === "dish_open"
+    const menuItemId = eventType === "dish_open" || eventType === "dish_close"
       ? await resolveAnalyticsContentItemId(env, body.menuItemId || body.itemId || body.dishId, body.contentKey || body.content_key)
       : null;
     const tracked = await writeAnalyticsEvent(env, slug, {
@@ -333,6 +381,7 @@ async function trackAnalyticsEvent(env, slug, body) {
       sessionId: cleanLimited(body.sessionId, 120) || "",
       referrer: cleanLimited(body.referrer, 500) || "",
       userAgent: cleanLimited(body.userAgent, 500) || "",
+      durationMs: cleanLimited(body.durationMs, 40) || "",
     });
 
     return jsonResponse(200, { ok: true, tracked });
@@ -394,7 +443,7 @@ async function getAnalytics(env, slug, range = "today") {
         year: countEventsByLocalDateRange(events, "dish_open", yearStartKey, shiftDateKey(todayKey, 1)),
         allTime: events.filter((event) => event.event_type === "dish_open").length,
       },
-      averageViewTime: null,
+      averageViewTime: formatAverageViewTime(calculateAverageDishViewTime(selectedEvents)),
       popularDishes: dishIds
         .map((id) => ({ id, title: dishNames[id] || getAnalyticsDishFallbackTitle(id), opens: dishCounts[id] }))
         .sort((a, b) => b.opens - a.opens)
@@ -414,7 +463,7 @@ async function getAnalytics(env, slug, range = "today") {
       allTimeSummary: buildAllTimeSummary(events, timeZone),
       languages: buildPercentRows(selectedEvents, "language", "language", (value) => String(value || "").toUpperCase()),
       devices: buildPercentRows(selectedEvents, "device_type", "device"),
-      recentEvents: buildRecentEvents(selectedEvents.slice(0, 10), dishNames, timeZone),
+      recentEvents: buildRecentEvents(selectedEvents.filter((event) => event.event_type !== "dish_close").slice(0, 10), dishNames, timeZone),
       timeZone,
       range: normalizedRange,
     },
@@ -442,6 +491,18 @@ async function getContentItem(env, id) {
 
   if (!rows[0]) throw new Error("Menu item was not found.");
   return rows[0];
+}
+
+async function getMenuHeroContentItem(env) {
+  const rows = await supabaseRest(env, "content_items", {
+    query: {
+      select: "*",
+      content_type: "eq.menu",
+      order: "sort_order.asc",
+    },
+  });
+
+  return rows.find(isMenuHeroContentItem) || null;
 }
 
 async function getAnalyticsEvents(env, slug, fromDate) {
@@ -481,13 +542,14 @@ async function writeAnalyticsEvent(env, slug, payload) {
         body: [{
           content_type: "analytics_event",
           section_key: payload.eventType,
-          content_key: payload.contentKey || `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          title_ru: payload.menuItemId ? String(payload.menuItemId) : "",
+          content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          title_ru: payload.menuItemId ? String(payload.menuItemId) : payload.contentKey || "",
           title_en: payload.language || "",
           title_kk: payload.deviceType || "",
           description_ru: payload.sessionId || "",
           description_en: payload.dishTitle || payload.referrer || "",
           description_kk: payload.sectionKey || payload.userAgent || "",
+          badge_ru: payload.durationMs || "",
           is_active: true,
           sort_order: Date.now(),
         }],
@@ -518,24 +580,28 @@ async function readAnalyticsEvents(env, slug, fromDate) {
       },
     });
 
-    if (rows.length) {
-      return rows.map((row) => ({
-        id: row.id,
-        event_type: row.event_type,
-        menu_item_id: row.menu_item_id || null,
-        language: row.language || null,
-        device_type: row.device_type || null,
-        session_id: row.session_id || null,
-        created_at: row.created_at,
-      }));
-    }
+    const primaryRows = rows.map((row) => ({
+      id: row.id,
+      event_type: row.event_type,
+      menu_item_id: row.menu_item_id || null,
+      language: row.language || null,
+      device_type: row.device_type || null,
+      session_id: row.session_id || null,
+      created_at: row.created_at,
+    }));
+    const fallbackRows = await readFallbackAnalyticsEvents(env, fromDate);
+    return mergeAnalyticsEvents(primaryRows, fallbackRows);
   } catch (menuAnalyticsError) {
     console.warn("[tekemet-admin-function] menu_analytics_events read failed", menuAnalyticsError?.message || menuAnalyticsError);
   }
 
+  return readFallbackAnalyticsEvents(env, fromDate);
+}
+
+async function readFallbackAnalyticsEvents(env, fromDate) {
   const rows = await supabaseRest(env, "content_items", {
     query: {
-      select: "id,section_key,content_key,title_ru,title_en,title_kk,description_ru,description_en,description_kk,created_at",
+      select: "id,section_key,content_key,title_ru,title_en,title_kk,description_ru,description_en,description_kk,badge_ru,created_at",
       content_type: "eq.analytics_event",
       ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
       order: "created_at.desc",
@@ -552,8 +618,26 @@ async function readAnalyticsEvents(env, slug, fromDate) {
     language: row.title_en || null,
     device_type: row.title_kk || null,
     session_id: row.description_ru || null,
+    duration_ms: Number(row.badge_ru || 0) || null,
     created_at: row.created_at,
   }));
+}
+
+function mergeAnalyticsEvents(primaryRows, fallbackRows) {
+  const seen = new Set();
+  return [...(primaryRows || []), ...(fallbackRows || [])]
+    .filter((event) => {
+      const key = [
+        event.event_type || "",
+        event.menu_item_id || event.content_key || "",
+        event.session_id || "",
+        event.created_at || "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 async function getRestaurantId(env, slug) {
@@ -681,6 +765,19 @@ function mapContentItemToAdminItem(item) {
     sort_order: Number(item.sort_order || 0),
     version: Number(item.version || 1),
   };
+}
+
+function isMenuHeroContentItem(item) {
+  const contentKey = clean(item?.content_key).toLowerCase();
+  const sectionKey = clean(item?.section_key).toLowerCase();
+  const title = clean(item?.title_ru || item?.title_en || item?.title_kk).toLowerCase();
+  return contentKey === "menu_hero"
+    || contentKey === "menu-hero"
+    || contentKey === "hero"
+    || sectionKey === "hero"
+    || title === "menu hero"
+    || title === "menu_hero"
+    || title === "menu-hero";
 }
 
 function buildContentCategories(items) {
@@ -1029,7 +1126,7 @@ function cleanLimited(value, maxLength) {
 
 function normalizeEventType(value) {
   const normalized = clean(value);
-  return ["menu_open", "dish_open", "language_change"].includes(normalized) ? normalized : "";
+  return ["menu_open", "dish_open", "dish_close", "language_change"].includes(normalized) ? normalized : "";
 }
 
 function normalizeDeviceType(value) {
@@ -1169,6 +1266,52 @@ function countBy(rows, key) {
     acc[value] = (acc[value] || 0) + 1;
     return acc;
   }, {});
+}
+
+function calculateAverageDishViewTime(events) {
+  const sorted = [...(events || [])].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const openByKey = new Map();
+  const durations = [];
+  const minimumMs = 1200;
+  const maximumMs = 15 * 60 * 1000;
+
+  sorted.forEach((event) => {
+    if (event.event_type !== "dish_open" && event.event_type !== "dish_close") return;
+    const key = [
+      event.session_id || "session",
+      event.menu_item_id || event.content_key || "dish",
+    ].join("|");
+
+    if (event.event_type === "dish_open") {
+      openByKey.set(key, new Date(event.created_at).getTime());
+      return;
+    }
+
+    const explicitDuration = Number(event.duration_ms || 0);
+    const openedAt = openByKey.get(key);
+    const duration = explicitDuration > 0
+      ? explicitDuration
+      : openedAt
+        ? new Date(event.created_at).getTime() - openedAt
+        : 0;
+
+    if (duration >= minimumMs && duration <= maximumMs) {
+      durations.push(duration);
+    }
+    openByKey.delete(key);
+  });
+
+  if (!durations.length) return null;
+  return Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length / 1000);
+}
+
+function formatAverageViewTime(seconds) {
+  const value = Number(seconds || 0);
+  if (!value) return null;
+  if (value < 60) return `${value} сек`;
+  const minutes = Math.floor(value / 60);
+  const rest = value % 60;
+  return rest ? `${minutes} мин ${rest} сек` : `${minutes} мин`;
 }
 
 function buildVisitsByHour(menuOpenEvents) {

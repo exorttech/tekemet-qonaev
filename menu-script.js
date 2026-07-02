@@ -3,6 +3,7 @@
 // ==============================
 
 (function () {
+let activeDishModalSession = null;
 
 // Service charge popup (shown on each visit)
 window.addEventListener('load', function() {
@@ -111,6 +112,12 @@ function trackDishOpen(item) {
     }
 }
 
+function trackDishClose(item, durationMs) {
+    if (window.TekemetContentSync && typeof window.TekemetContentSync.trackDishClose === 'function') {
+        window.TekemetContentSync.trackDishClose(item, durationMs);
+    }
+}
+
 function renderDishModalContent(item) {
     const copy = getDishModalCopy();
     const meta = [
@@ -151,6 +158,10 @@ function openDishModal(contentId) {
     overlay.classList.add('is-open');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('modal-open');
+    activeDishModalSession = {
+        item,
+        openedAt: Date.now()
+    };
     trackDishOpen(item);
 }
 
@@ -164,6 +175,12 @@ function closeDishModal() {
     if (!overlay) {
         return;
     }
+
+    if (activeDishModalSession && overlay.classList.contains('is-open')) {
+        const durationMs = Date.now() - activeDishModalSession.openedAt;
+        trackDishClose(activeDishModalSession.item, durationMs);
+    }
+    activeDishModalSession = null;
 
     const content = overlay.querySelector('[data-dish-modal-content]');
     if (content) {

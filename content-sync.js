@@ -129,6 +129,37 @@
         };
     }
 
+    function isMenuHeroRecord(record) {
+        const contentKey = String(record?.content_key || '').trim().toLowerCase();
+        const sectionKey = String(record?.section_key || '').trim().toLowerCase();
+        const title = String(record?.title_ru || record?.title_en || record?.title_kk || record?.title || '').trim().toLowerCase();
+        return contentKey === 'menu_hero'
+            || contentKey === 'menu-hero'
+            || contentKey === 'hero'
+            || sectionKey === 'hero'
+            || title === 'menu hero'
+            || title === 'menu_hero'
+            || title === 'menu-hero';
+    }
+
+    function getMenuHeroRecord(records) {
+        return (records || []).find(isMenuHeroRecord) || null;
+    }
+
+    function applyMenuHeroRecord(record, client) {
+        if (!record) {
+            return;
+        }
+
+        const imageUrl = resolveImageUrl(record, client);
+        if (!imageUrl) {
+            return;
+        }
+
+        localStorage.setItem('menuHeroImagePath', imageUrl);
+        applyMenuHeroImage();
+    }
+
     function resolveImageUrl(record, client) {
         if (record.image_url) {
             return record.image_url;
@@ -177,7 +208,7 @@
 
     function renderMenuItems(records, client) {
         const popupItems = {};
-        records.forEach((record) => {
+        records.filter((record) => !isMenuHeroRecord(record)).forEach((record) => {
             const popupItem = normalizeMenuPopupItem(record, client);
             if (popupItem.id) {
                 popupItems[popupItem.id] = popupItem;
@@ -187,7 +218,7 @@
 
         // Group records by section
         const sections = {};
-        records.forEach((record) => {
+        records.filter((record) => !isMenuHeroRecord(record)).forEach((record) => {
             const section = record.section_key || 'menu';
             if (!sections[section]) {
                 sections[section] = [];
@@ -369,6 +400,7 @@
             const records = data || [];
 
             if (pageKind === MENU_TYPE) {
+                applyMenuHeroRecord(getMenuHeroRecord(records), client);
                 renderMenuItems(records, client);
                 trackMenuEvent('menu_open');
             } else {
@@ -418,6 +450,7 @@
 
             const records = payload.items || [];
             if (pageKind === MENU_TYPE) {
+                applyMenuHeroRecord(payload.menuHero || getMenuHeroRecord(records), null);
                 renderMenuItems(records, null);
                 trackMenuEvent('menu_open');
             } else {
@@ -568,11 +601,37 @@
         });
     }
 
+    function trackDishClose(itemOrId, durationMs) {
+        const item = itemOrId && typeof itemOrId === 'object'
+            ? itemOrId
+            : (window.TekemetMenuItemsById || {})[String(itemOrId || '')] || null;
+        const menuItemId = item?.id || itemOrId || null;
+        if (!menuItemId) return;
+
+        trackMenuEvent('dish_close', {
+            menuItemId,
+            itemId: menuItemId,
+            dishId: menuItemId,
+            contentKey: item?.contentKey || '',
+            dishTitle: item?.titleRu || item?.title || '',
+            dishTitleRu: item?.titleRu || item?.title || '',
+            dishCategory: item?.sectionTitle || item?.sectionKey || '',
+            sectionKey: item?.sectionKey || '',
+            dishPrice: item?.rawPrice || item?.price || '',
+            price: item?.rawPrice || item?.price || '',
+            currency: item?.currency || 'KZT',
+            durationMs: Number(durationMs || 0),
+            restaurantSlug: RESTAURANT_SLUG,
+            timestamp: new Date().toISOString()
+        });
+    }
+
     window.TekemetContentSync = {
         refresh: loadAndRender,
         locale,
         getMenuItem: (id) => (window.TekemetMenuItemsById || {})[String(id || '')] || null,
-        trackDishOpen
+        trackDishOpen,
+        trackDishClose
     };
 })();
 

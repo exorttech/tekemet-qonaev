@@ -2,11 +2,13 @@ const DEFAULT_RESTAURANT_SLUG = "tekemet-qonaev";
 const ADMIN_API_URL = getAdminApiUrl();
 const sessionKeyPrefix = "tekemet-admin-session:";
 const themeStorageKey = "tekemet_admin_theme";
+const MAX_HOUR_VISITS = 50;
 
 const state = {
   restaurant: { slug: DEFAULT_RESTAURANT_SLUG, name: "Tekemet Qonaev", city: "Qonaev", brand: "#2563eb" },
   categories: [],
   items: [],
+  menuHero: null,
   sessionToken: sessionStorage.getItem(sessionKeyPrefix + getRestaurantSlug()) || "",
   activeView: "overview",
   loading: false,
@@ -33,6 +35,7 @@ const el = {
   metrics: document.querySelector("[data-metrics]"),
   attentionList: document.querySelector("[data-attention-list]"),
   attentionCount: document.querySelector("[data-attention-count]"),
+  overviewGrid: document.querySelector(".overview-grid"),
   dishGrid: document.querySelector("[data-dish-grid]"),
   categoryList: document.querySelector("[data-category-list]"),
   stopList: document.querySelector("[data-stop-list]"),
@@ -334,7 +337,7 @@ function getAdminApiConfigError() {
   if (explicitError) return explicitError;
   if (ADMIN_API_URL) return "";
   if (isLocalAdminHost()) {
-    return "Для локального входа через Live Server укажите полный URL Cloudflare Worker в window.EXORT_ADMIN_API_URL или localStorage key exort.admin.apiUrl.";
+    return "Для локального входа через Live Server укажите полный URL Netlify Function в window.EXORT_ADMIN_API_URL или localStorage key exort.admin.apiUrl.";
   }
   return "Адрес сервиса Exort Admin не настроен.";
 }
@@ -344,6 +347,18 @@ function getPublicMenuUrl() {
 }
 
 function ensureAdminEnhancements() {
+  if (el.overviewGrid && !document.querySelector("[data-menu-hero-panel]")) {
+    const heroPanel = document.createElement("article");
+    heroPanel.className = "panel menu-hero-admin";
+    heroPanel.dataset.menuHeroPanel = "";
+    const attentionPanel = el.overviewGrid.querySelector(".attention-panel");
+    if (attentionPanel) {
+      el.overviewGrid.insertBefore(heroPanel, attentionPanel);
+    } else {
+      el.overviewGrid.append(heroPanel);
+    }
+  }
+
   if (document.querySelector("[data-photo-filter]")) return;
 
   const photoFilter = document.createElement("select");
@@ -446,6 +461,13 @@ function bindEvents() {
   el.pinVisibility.addEventListener("click", togglePinVisibility);
 
   document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("change", (event) => {
+    const heroFileInput = event.target.closest("[data-menu-hero-file]");
+    if (heroFileInput) {
+      handleMenuHeroFile(heroFileInput.files?.[0]);
+      heroFileInput.value = "";
+    }
+  });
   [el.menuSearch, el.categoryFilter, el.statusFilter, el.photoFilter, el.translationFilter]
     .filter(Boolean)
     .forEach((control) => control.addEventListener("input", renderDishes));
@@ -602,7 +624,11 @@ function applyAdminData(result) {
     state.restaurant = { ...state.restaurant, ...normalizeRestaurant(result.restaurant) };
   }
   state.categories = (result.categories || []).map(normalizeCategory).sort((a, b) => a.sort - b.sort);
-  state.items = (result.items || []).map(normalizeItem).sort((a, b) => a.sort_order - b.sort_order);
+  state.items = (result.items || [])
+    .filter((item) => !isMenuHeroItem(item))
+    .map(normalizeItem)
+    .sort((a, b) => a.sort_order - b.sort_order);
+  state.menuHero = result.menuHero ? normalizeItem(result.menuHero) : null;
   syncRestaurantIdentity();
   renderAll();
 }
@@ -726,6 +752,7 @@ function clearAdminHash(reason = "") {
 function renderAll() {
   syncRestaurantIdentity();
   renderMetrics();
+  renderMenuHeroPanel();
   renderAttention();
   renderFilters();
   renderDishes();
@@ -889,7 +916,7 @@ function renderAnalytics() {
       ${renderAnalyticsMetric("Посещения меню", menuVisits, rangeLabel, "menu_open")}
       ${renderAnalyticsMetric("Сессии", uniqueGuests, rangeLabel, "session_id")}
       ${renderAnalyticsMetric("Открытия блюд", dishOpens, rangeLabel, "dish_open")}
-      ${renderAnalyticsMetric("Среднее время просмотра", analytics?.averageViewTime || null, "будет доступно позже", "view_time")}
+      ${renderAnalyticsMetric("Среднее время просмотра", analytics?.averageViewTime || null, "", "view_time")}
     </div>
 
     <div class="analytics-main-grid">
@@ -948,7 +975,7 @@ function renderAnalyticsMetric(label, value, hint, code) {
   return `<article class="analytics-metric-card" data-analytics-code="${code}">
     <span>${label}</span>
     <strong>${empty ? "Нет данных" : formatAnalyticsNumber(value)}</strong>
-    <small>${empty ? hint : hint}</small>
+    ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
   </article>`;
 }
 
@@ -1000,58 +1027,55 @@ function renderDayDetail(detail, range) {
 
 function renderHourChart(hours) {
   const normalized = normalizeWorkingHours(hours);
-  const labels = getWorkingHourAxisLabels();
   const total = normalized.reduce((sum, entry) => sum + Number(entry.visits || 0), 0);
   const max = Math.max(...normalized.map((entry) => entry.visits), 0);
   const peak = normalized.reduce((best, entry) => (entry.visits > (best?.visits || -1) ? entry : best), null);
-
-  if (!max) {
-    return `<div class="analytics-activity-shell analytics-activity-shell--empty">
-      <div class="analytics-activity-summary">
-        <span class="analytics-activity-note">\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0434\u0438\u0430\u043f\u0430\u0437\u043e\u043d: 07:00 - 24:00</span>
-      </div>
-      <div class="analytics-empty analytics-empty--chart">
-        <strong>\u0414\u0430\u043d\u043d\u044b\u0445 \u043f\u043e \u0440\u0430\u0431\u043e\u0447\u0438\u043c \u0447\u0430\u0441\u0430\u043c \u043f\u043e\u043a\u0430 \u043d\u0435\u0442</strong>
-        <p>\u0413\u0440\u0430\u0444\u0438\u043a \u0437\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u043f\u0435\u0440\u0432\u044b\u0445 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u043c\u0435\u043d\u044e \u0438 \u043f\u043e\u043a\u0430\u0436\u0435\u0442, \u0432 \u043a\u0430\u043a\u0438\u0435 \u0447\u0430\u0441\u044b \u0433\u043e\u0441\u0442\u0438 \u043f\u0440\u043e\u044f\u0432\u043b\u044f\u044e\u0442 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u0439 \u0438\u043d\u0442\u0435\u0440\u0435\u0441.</p>
-      </div>
-    </div>`;
-  }
+  const scale = [50, 40, 30, 20, 10, 0];
 
   return `<div class="analytics-activity-shell">
     <div class="analytics-activity-summary">
       <span class="analytics-activity-note">\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0434\u0438\u0430\u043f\u0430\u0437\u043e\u043d: 07:00 - 24:00</span>
-      <strong class="analytics-activity-peak">\u041f\u0438\u043a: ${escapeHtml(formatHourRange(peak.hour))} - ${formatVisitCount(peak.visits)}</strong>
+      <strong class="analytics-activity-peak">${max ? `\u041f\u0438\u043a: ${escapeHtml(formatHourRange(peak.hour))} - ${formatVisitCount(peak.visits)}` : "\u041f\u0438\u043a: \u043d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445"}</strong>
     </div>
     <div class="analytics-activity-stage">
-      <div class="analytics-activity-grid" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
+      <div class="analytics-activity-scale" aria-hidden="true">
+        ${scale.map((value) => `<span>${value}</span>`).join("")}
       </div>
-      <div class="analytics-activity-bars" aria-label="\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0447\u0430\u0441\u0430\u043c">
-        ${normalized.map((entry, index) => {
-          const visits = Number(entry.visits || 0);
-          const percent = getWorkingHourShare(visits, total);
-          const isPeak = visits === max && max > 0;
-          const height = getWorkingHourBarHeight(visits, max);
-          return `<button
-            class="analytics-activity-bar ${isPeak ? "is-peak" : visits > 0 ? "is-active" : ""}"
-            type="button"
-            style="--column:${index + 1};--bar-height:${height}%;"
-            aria-label="${escapeHtml(formatHourRange(entry.hour))}. ${formatVisitCount(visits)}. ${percent}% \u043e\u0442 \u043e\u0431\u0449\u0435\u0433\u043e \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u0437\u0430 \u0434\u0435\u043d\u044c.">
-          >
-            <span class="analytics-activity-bar-rail" aria-hidden="true"></span>
-            <span class="analytics-activity-bar-fill" aria-hidden="true"></span>
-            <span class="analytics-activity-tooltip" role="presentation">
-              <strong>${escapeHtml(formatHourRange(entry.hour))}</strong>
-              <em>${formatVisitCount(visits)}</em>
-              <b>${percent}% \u043e\u0442 \u0442\u0440\u0430\u0444\u0438\u043a\u0430 \u0434\u043d\u044f</b>
-            </span>
-          </button>`;
-        }).join("")}
-      </div>
-      <div class="analytics-activity-axis" aria-hidden="true">
-        ${labels.map((label) => `<span class="${label === "24" ? "is-end" : ""}">${label}</span>`).join("")}
+      <div class="analytics-activity-chart">
+        <div class="analytics-activity-plot">
+          <div class="analytics-activity-grid" aria-hidden="true">
+            ${scale.map(() => "<span></span>").join("")}
+          </div>
+          <div class="analytics-activity-bars" style="grid-template-columns:repeat(${normalized.length},minmax(46px,1fr));" aria-label="\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0447\u0430\u0441\u0430\u043c">
+            ${normalized.map((entry, index) => {
+              const visits = Number(entry.visits || 0);
+              const percent = getWorkingHourShare(visits, total);
+              const isPeak = visits === max && max > 0;
+              const height = getWorkingHourBarHeight(visits);
+              return `<button
+                class="analytics-activity-bar ${isPeak ? "is-peak" : visits > 0 ? "is-active" : ""}"
+                type="button"
+                style="--bar-height:${height}%;"
+                aria-label="${escapeHtml(formatHourRange(entry.hour))}. ${formatVisitCount(visits)}. ${percent}% \u043e\u0442 \u043e\u0431\u0449\u0435\u0433\u043e \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u0437\u0430 \u0434\u0435\u043d\u044c.">
+                <span class="analytics-activity-count" aria-hidden="true">${formatAnalyticsNumber(visits)}</span>
+                <span class="analytics-activity-bar-rail" aria-hidden="true">
+                  <span class="analytics-activity-bar-fill"></span>
+                </span>
+                <span class="analytics-activity-tooltip" role="presentation">
+                  <strong>${escapeHtml(formatHourRange(entry.hour))}</strong>
+                  <em>${formatVisitCount(visits)}</em>
+                  <b>${percent}% \u043e\u0442 \u0442\u0440\u0430\u0444\u0438\u043a\u0430 \u0434\u043d\u044f</b>
+                </span>
+              </button>`;
+            }).join("")}
+          </div>
+        </div>
+        <div class="analytics-activity-axis" style="grid-template-columns:repeat(${normalized.length},minmax(46px,1fr));" aria-hidden="true">
+          ${normalized.map((entry) => `<span>${formatHourStart(entry.hour)}</span>`).join("")}
+        </div>
       </div>
     </div>
+    ${max ? "" : `<p class="analytics-period-note">\u041f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u0437\u0430 \u0440\u0430\u0431\u043e\u0447\u0438\u0435 \u0447\u0430\u0441\u044b.</p>`}
   </div>`;
 }
 
@@ -1082,6 +1106,43 @@ function renderVisitsByDay(days) {
       ${max ? "" : `<p class="analytics-period-note">Пока нет посещений за этот период.</p>`}
     </div>
   </article>`;
+}
+
+function renderMenuHeroPanel() {
+  const panel = document.querySelector("[data-menu-hero-panel]");
+  if (!panel) return;
+
+  const image = state.menuHero?.image || "";
+  panel.innerHTML = `
+    <div class="menu-hero-admin__copy">
+      <p class="kicker">Обзор</p>
+      <h2>Главное фото меню</h2>
+      <p>Это изображение показывается в верхнем блоке клиентского меню Tekemet.</p>
+    </div>
+    <div class="menu-hero-admin__preview ${image ? "has-image" : ""}">
+      ${image ? `<img src="${escapeHtml(image)}" alt="Главное фото меню" />` : `<div><span>Фото меню</span><small>Изображение пока не загружено</small></div>`}
+    </div>
+    <div class="menu-hero-admin__actions">
+      <label class="secondary-button compact">
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" data-menu-hero-file />
+        <span>${image ? "Заменить фото" : "Загрузить фото"}</span>
+      </label>
+      <small>Используется существующая запись Menu hero в Supabase.</small>
+    </div>
+  `;
+}
+
+async function handleMenuHeroFile(file) {
+  if (!file) return;
+  try {
+    const imageData = await prepareImage(file);
+    const result = await adminApi("uploadMenuHeroPhoto", { imageData });
+    state.menuHero = result.menuHero ? normalizeItem(result.menuHero) : state.menuHero;
+    renderMenuHeroPanel();
+    toast("Главное фото меню обновлено", "success");
+  } catch (error) {
+    toast(toFriendlyError(error.message) || "Не удалось заменить главное фото меню", "danger");
+  }
 }
 function renderVisitsByWeek(weeks) {
   const normalizedWeeks = normalizeWeeks(weeks);
@@ -1219,7 +1280,9 @@ function getAnalyticsRangeLabel(range = "7d") {
 
 function formatAnalyticsNumber(value) {
   if (value === null || value === undefined) return "0";
-  return new Intl.NumberFormat("ru-RU").format(Number(value || 0));
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return escapeHtml(String(value || ""));
+  return new Intl.NumberFormat("ru-RU").format(numeric);
 }
 
 function normalizeHours(hours) {
@@ -1234,15 +1297,10 @@ function normalizeWorkingHours(hours) {
   return normalizeHours(hours).filter((entry) => entry.hour >= 7);
 }
 
-function getWorkingHourAxisLabels() {
-  return Array.from({ length: 18 }, (_, index) => String(index + 7).padStart(2, "0"));
-}
-
-function getWorkingHourBarHeight(value, max) {
+function getWorkingHourBarHeight(value) {
   const numericValue = Number(value || 0);
-  const numericMax = Number(max || 0);
-  if (!numericValue || !numericMax) return 0;
-  return Math.max(14, Math.round(Math.pow(numericValue / numericMax, 0.82) * 100));
+  if (!numericValue) return 0;
+  return Math.round(Math.min(numericValue / MAX_HOUR_VISITS, 1) * 100);
 }
 
 function getWorkingHourShare(value, total) {
@@ -1902,6 +1960,22 @@ function getKnownCategoryRuLabel(...values) {
   return "";
 }
 
+function isMenuHeroItem(item) {
+  const contentKey = normalizeCategoryLookupKey(item?.content_key || item?.contentKey || "");
+  const sectionKey = normalizeCategoryLookupKey(item?.section_key || item?.category_id || "");
+  const titleKey = normalizeCategoryLookupKey(
+    item?.title_ru || item?.name_ru || item?.title_en || item?.name_en || item?.name || item?.title || "",
+  );
+  return contentKey === "menu-hero"
+    || contentKey === "hero"
+    || sectionKey === "hero"
+    || titleKey === "menu-hero";
+}
+
+function formatHourStart(hour) {
+  return `${String(Number(hour || 0)).padStart(2, "0")}:00`;
+}
+
 function getItemDisplayName(item) {
   return firstFilledValue(
     item?.name_ru,
@@ -2028,6 +2102,18 @@ function prepareImage(file) {
 }
 
 function ensureAdminEnhancements() {
+  if (el.overviewGrid && !document.querySelector("[data-menu-hero-panel]")) {
+    const heroPanel = document.createElement("article");
+    heroPanel.className = "panel menu-hero-admin";
+    heroPanel.dataset.menuHeroPanel = "";
+    const attentionPanel = el.overviewGrid.querySelector(".attention-panel");
+    if (attentionPanel) {
+      el.overviewGrid.insertBefore(heroPanel, attentionPanel);
+    } else {
+      el.overviewGrid.append(heroPanel);
+    }
+  }
+
   if (document.querySelector("[data-photo-filter]")) return;
 
   const photoFilter = document.createElement("select");
@@ -2429,6 +2515,13 @@ function bindEvents() {
   el.pinVisibility.addEventListener("click", togglePinVisibility);
 
   document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("change", (event) => {
+    const heroFileInput = event.target.closest("[data-menu-hero-file]");
+    if (heroFileInput) {
+      handleMenuHeroFile(heroFileInput.files?.[0]);
+      heroFileInput.value = "";
+    }
+  });
   [el.menuSearch, el.categoryFilter, el.statusFilter, el.photoFilter, el.translationFilter]
     .filter(Boolean)
     .forEach((control) => control.addEventListener("input", renderDishes));
