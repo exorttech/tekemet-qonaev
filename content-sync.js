@@ -6,6 +6,25 @@
     const RESTAURANT_SLUG = 'tekemet-qonaev';
     const locale = (document.documentElement.lang || 'ru').toLowerCase();
     const pageKind = document.body.classList.contains('menu-page') ? MENU_TYPE : ROOM_TYPE;
+    const DEFAULT_ADMIN_FUNCTION_URL = 'https://tekemetqonaev.com/.netlify/functions/tekemet-admin';
+
+    function getAdminFunctionUrl() {
+        const configured = window.EXORT_ADMIN_API_URL
+            || window.TEKEMET_ADMIN_API_URL
+            || localStorage.getItem('exort.admin.apiUrl')
+            || localStorage.getItem('tekemet.admin.apiUrl')
+            || '';
+        if (configured) {
+            return configured;
+        }
+
+        const host = window.location.hostname || '';
+        if (host === 'tekemetqonaev.com' || host.endsWith('.tekemetqonaev.com')) {
+            return '/.netlify/functions/tekemet-admin';
+        }
+
+        return DEFAULT_ADMIN_FUNCTION_URL;
+    }
 
     function escapeHtml(value) {
         return String(value || '').replace(/[&<>"']/g, (match) => ({
@@ -437,7 +456,7 @@
 
     async function loadAndRenderFromBackend() {
         try {
-            const response = await fetch('/.netlify/functions/tekemet-admin', {
+            const response = await fetch(getAdminFunctionUrl(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'getPublicContent', contentType: pageKind })
@@ -552,28 +571,40 @@
         const payload = (extra && typeof extra === 'object')
             ? extra
             : { menuItemId: extra || null };
+        const body = JSON.stringify({
+            action: 'trackAnalyticsEvent',
+            restaurantSlug: RESTAURANT_SLUG,
+            eventType,
+            menuItemId: payload.menuItemId || null,
+            language: locale,
+            deviceType: getDeviceType(),
+            sessionId: getAnalyticsSessionId(),
+            visitorId: getAnalyticsVisitorId(),
+            pagePath: window.location.pathname || '/menu',
+            browser: getBrowserName(),
+            os: getOsName(),
+            qrCode: getUrlParam('qr') || getUrlParam('table'),
+            source: getUrlParam('source') || getUrlParam('utm_source'),
+            userAgent: navigator.userAgent || '',
+            referrer: document.referrer || '',
+            ...payload
+        });
+        const analyticsUrl = getAdminFunctionUrl();
 
-        fetch('/.netlify/functions/tekemet-admin', {
+        try {
+            if (navigator.sendBeacon) {
+                const queued = navigator.sendBeacon(analyticsUrl, new Blob([body], { type: 'application/json' }));
+                if (queued) return;
+            }
+        } catch (error) {
+            console.warn('[tekemet-menu] analytics beacon skipped', error);
+        }
+
+        fetch(analyticsUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'trackAnalyticsEvent',
-                restaurantSlug: RESTAURANT_SLUG,
-                eventType,
-                menuItemId: payload.menuItemId || null,
-                language: locale,
-                deviceType: getDeviceType(),
-                sessionId: getAnalyticsSessionId(),
-                visitorId: getAnalyticsVisitorId(),
-                pagePath: window.location.pathname || '/menu',
-                browser: getBrowserName(),
-                os: getOsName(),
-                qrCode: getUrlParam('qr') || getUrlParam('table'),
-                source: getUrlParam('source') || getUrlParam('utm_source'),
-                userAgent: navigator.userAgent || '',
-                referrer: document.referrer || '',
-                ...payload
-            })
+            body,
+            keepalive: true
         }).catch(() => {});
     }
 

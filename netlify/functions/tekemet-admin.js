@@ -365,8 +365,9 @@ async function trackAnalyticsEvent(env, slug, body) {
     const eventType = normalizeEventType(body.eventType);
     if (!eventType) return jsonResponse(200, { ok: true, tracked: false });
 
+    const rawMenuItemId = body.menuItemId || body.itemId || body.dishId || "";
     const menuItemId = eventType === "dish_open" || eventType === "dish_close"
-      ? await resolveAnalyticsContentItemId(env, body.menuItemId || body.itemId || body.dishId, body.contentKey || body.content_key)
+      ? (await resolveAnalyticsContentItemId(env, rawMenuItemId, body.contentKey || body.content_key)) || cleanLimited(rawMenuItemId, 160)
       : null;
     const tracked = await writeAnalyticsEvent(env, slug, {
       eventType,
@@ -463,7 +464,7 @@ async function getAnalytics(env, slug, range = "today") {
       allTimeSummary: buildAllTimeSummary(events, timeZone),
       languages: buildPercentRows(selectedEvents, "language", "language", (value) => String(value || "").toUpperCase()),
       devices: buildPercentRows(selectedEvents, "device_type", "device"),
-      recentEvents: buildRecentEvents(selectedEvents.filter((event) => event.event_type !== "dish_close").slice(0, 10), dishNames, timeZone),
+      recentEvents: buildRecentEvents(selectRecentEventsForDisplay(selectedEvents), dishNames, timeZone),
       timeZone,
       range: normalizedRange,
     },
@@ -516,6 +517,10 @@ async function getAnalyticsEvents(env, slug, fromDate) {
 }
 
 async function writeAnalyticsEvent(env, slug, payload) {
+  if (shouldUseContentAnalyticsFallback(payload)) {
+    return writeFallbackAnalyticsEvent(env, payload);
+  }
+
   const restaurantId = await getRestaurantId(env, slug);
   const menuAnalyticsPayload = {
     ...(restaurantId ? { restaurant_id: restaurantId } : {}),
@@ -537,25 +542,7 @@ async function writeAnalyticsEvent(env, slug, payload) {
     return true;
   } catch (menuAnalyticsError) {
     try {
-      await supabaseRest(env, "content_items", {
-        method: "POST",
-        body: [{
-          content_type: "analytics_event",
-          section_key: payload.eventType,
-          content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          title_ru: payload.menuItemId ? String(payload.menuItemId) : payload.contentKey || "",
-          title_en: payload.language || "",
-          title_kk: payload.deviceType || "",
-          description_ru: payload.sessionId || "",
-          description_en: payload.dishTitle || payload.referrer || "",
-          description_kk: payload.sectionKey || payload.userAgent || "",
-          badge_ru: payload.durationMs || "",
-          is_active: true,
-          sort_order: Date.now(),
-        }],
-        prefer: "return=minimal",
-      });
-      return true;
+      return await writeFallbackAnalyticsEvent(env, payload);
     } catch (contentItemsError) {
       console.warn("[tekemet-admin-function] analytics write fallback failed", {
         menuAnalyticsError: menuAnalyticsError?.message || String(menuAnalyticsError),
@@ -731,6 +718,34 @@ async function resolveAnalyticsContentItemId(env, menuItemId, contentKey = "") {
   } catch {
     return null;
   }
+}
+
+function shouldUseContentAnalyticsFallback(payload) {
+  if (payload.eventType !== "dish_open" && payload.eventType !== "dish_close") return false;
+  const menuItemId = clean(payload.menuItemId);
+  return Boolean(menuItemId && !/^[1-9]\d*$/.test(menuItemId));
+}
+
+async function writeFallbackAnalyticsEvent(env, payload) {
+  await supabaseRest(env, "content_items", {
+    method: "POST",
+    body: [{
+      content_type: "analytics_event",
+      section_key: payload.eventType,
+      content_key: `analytics-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title_ru: payload.menuItemId ? String(payload.menuItemId) : payload.contentKey || "",
+      title_en: payload.language || "",
+      title_kk: payload.deviceType || "",
+      description_ru: payload.sessionId || "",
+      description_en: payload.dishTitle || payload.referrer || "",
+      description_kk: payload.sectionKey || payload.userAgent || "",
+      badge_ru: payload.durationMs || "",
+      is_active: true,
+      sort_order: Math.floor(Date.now() / 1000),
+    }],
+    prefer: "return=minimal",
+  });
+  return true;
 }
 function getVirtualRestaurant(slug) {
   return {
@@ -1536,7 +1551,7 @@ function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME
     let label = "\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u043c\u0435\u043d\u044e";
     if (event.event_type === "dish_open") {
       const dishName = dishNames[event.menu_item_id] || dishNames[event.content_key] || event.dish_title || getAnalyticsDishFallbackTitle(event.menu_item_id || event.content_key);
-      label = `\u041e\u0442\u043a\u0440\u044b\u0442\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u0431\u043b\u044e\u0434\u0430: ${dishName}`;
+      label = `\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 ${dishName}`;
     }
     if (event.event_type === "language_change") label = `\u0421\u043c\u0435\u043d\u0438\u043b\u0438 \u044f\u0437\u044b\u043a \u043d\u0430 ${String(event.language || "").toUpperCase() || "\u0434\u0440\u0443\u0433\u043e\u0439"}`;
     return {
@@ -1546,6 +1561,27 @@ function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME
       displayTime: formatTimeInTimeZone(event.created_at, timeZone),
     };
   });
+}
+
+function selectRecentEventsForDisplay(events) {
+  const visibleEvents = (events || []).filter((event) => event.event_type !== "dish_close");
+  const latest = visibleEvents.slice(0, 7);
+  const latestDishOpens = visibleEvents.filter((event) => event.event_type === "dish_open").slice(0, 3);
+  const seen = new Set();
+  return [...latest, ...latestDishOpens]
+    .filter((event) => {
+      const key = [
+        event.event_type || "",
+        event.menu_item_id || event.content_key || "",
+        event.session_id || "",
+        event.created_at || "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10);
 }
 function getTimeZoneParts(value, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
   const parts = new Intl.DateTimeFormat("en-CA", {

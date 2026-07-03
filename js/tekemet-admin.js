@@ -351,12 +351,7 @@ function ensureAdminEnhancements() {
     const heroPanel = document.createElement("article");
     heroPanel.className = "panel menu-hero-admin";
     heroPanel.dataset.menuHeroPanel = "";
-    const attentionPanel = el.overviewGrid.querySelector(".attention-panel");
-    if (attentionPanel) {
-      el.overviewGrid.insertBefore(heroPanel, attentionPanel);
-    } else {
-      el.overviewGrid.append(heroPanel);
-    }
+    el.overviewGrid.append(heroPanel);
   }
 
   if (document.querySelector("[data-photo-filter]")) return;
@@ -575,7 +570,7 @@ async function adminApi(action, payload = {}) {
     if ([404, 405, 500, 502, 503].includes(response.status)) {
       console.error("[exort-admin] API endpoint is unavailable.", { action, endpoint: ADMIN_API_URL, status: response.status, data });
       if (response.status === 405 && isLocalAdminHost()) {
-        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Cloudflare Worker.");
+        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Netlify Function.");
       }
       throw new Error("Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort.");
     }
@@ -1046,13 +1041,14 @@ function renderHourChart(hours) {
           <div class="analytics-activity-grid" aria-hidden="true">
             ${scale.map(() => "<span></span>").join("")}
           </div>
-          <div class="analytics-activity-bars" style="grid-template-columns:repeat(${normalized.length},minmax(46px,1fr));" aria-label="\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0447\u0430\u0441\u0430\u043c">
+          <div class="analytics-activity-bars" style="grid-template-columns:repeat(${normalized.length},minmax(0,1fr));" aria-label="\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0447\u0430\u0441\u0430\u043c">
             ${normalized.map((entry, index) => {
               const visits = Number(entry.visits || 0);
               const percent = getWorkingHourShare(visits, total);
               const isPeak = visits === max && max > 0;
               const height = getWorkingHourBarHeight(visits);
-              return `<button
+              return `<div class="analytics-activity-column">
+                <button
                 class="analytics-activity-bar ${isPeak ? "is-peak" : visits > 0 ? "is-active" : ""}"
                 type="button"
                 style="--bar-height:${height}%;"
@@ -1066,12 +1062,11 @@ function renderHourChart(hours) {
                   <em>${formatVisitCount(visits)}</em>
                   <b>${percent}% \u043e\u0442 \u0442\u0440\u0430\u0444\u0438\u043a\u0430 \u0434\u043d\u044f</b>
                 </span>
-              </button>`;
+                </button>
+                <span class="analytics-activity-hour" aria-hidden="true">${formatHourStart(entry.hour)}</span>
+              </div>`;
             }).join("")}
           </div>
-        </div>
-        <div class="analytics-activity-axis" style="grid-template-columns:repeat(${normalized.length},minmax(46px,1fr));" aria-hidden="true">
-          ${normalized.map((entry) => `<span>${formatHourStart(entry.hour)}</span>`).join("")}
         </div>
       </div>
     </div>
@@ -2106,12 +2101,7 @@ function ensureAdminEnhancements() {
     const heroPanel = document.createElement("article");
     heroPanel.className = "panel menu-hero-admin";
     heroPanel.dataset.menuHeroPanel = "";
-    const attentionPanel = el.overviewGrid.querySelector(".attention-panel");
-    if (attentionPanel) {
-      el.overviewGrid.insertBefore(heroPanel, attentionPanel);
-    } else {
-      el.overviewGrid.append(heroPanel);
-    }
+    el.overviewGrid.append(heroPanel);
   }
 
   if (document.querySelector("[data-photo-filter]")) return;
@@ -2396,7 +2386,7 @@ async function adminApi(action, payload = {}) {
         data,
       });
       if (response.status === 405 && isLocalAdminHost()) {
-        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Cloudflare Worker.");
+        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Netlify Function.");
       }
       throw new Error("Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort.");
     }

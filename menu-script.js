@@ -108,14 +108,101 @@ function getDishModalItem(contentId) {
 
 function trackDishOpen(item) {
     if (window.TekemetContentSync && typeof window.TekemetContentSync.trackDishOpen === 'function') {
-        window.TekemetContentSync.trackDishOpen(item);
+        try {
+            window.TekemetContentSync.trackDishOpen(item);
+            return;
+        } catch (error) {
+            console.warn('[tekemet-menu] dish_open primary tracker failed', error);
+        }
     }
+    trackDishEventFallback('dish_open', item);
 }
 
 function trackDishClose(item, durationMs) {
     if (window.TekemetContentSync && typeof window.TekemetContentSync.trackDishClose === 'function') {
-        window.TekemetContentSync.trackDishClose(item, durationMs);
+        try {
+            window.TekemetContentSync.trackDishClose(item, durationMs);
+            return;
+        } catch (error) {
+            console.warn('[tekemet-menu] dish_close primary tracker failed', error);
+        }
     }
+    trackDishEventFallback('dish_close', item, durationMs);
+}
+
+function getAnalyticsSessionIdFallback() {
+    try {
+        const key = 'tekemet.analytics.session';
+        let value = sessionStorage.getItem(key);
+        if (!value) {
+            value = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+            sessionStorage.setItem(key, value);
+        }
+        return value;
+    } catch {
+        return 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    }
+}
+
+function getDeviceTypeFallback() {
+    const width = window.innerWidth || document.documentElement.clientWidth || 0;
+    if (width < 768) return 'mobile';
+    if (width < 1100) return 'tablet';
+    return 'desktop';
+}
+
+function getAdminFunctionUrlFallback() {
+    try {
+        const configured = window.EXORT_ADMIN_API_URL
+            || window.TEKEMET_ADMIN_API_URL
+            || localStorage.getItem('exort.admin.apiUrl')
+            || localStorage.getItem('tekemet.admin.apiUrl')
+            || '';
+        if (configured) return configured;
+
+        const host = window.location.hostname || '';
+        if (host === 'tekemetqonaev.com' || host.endsWith('.tekemetqonaev.com')) {
+            return '/.netlify/functions/tekemet-admin';
+        }
+    } catch {}
+
+    return 'https://tekemetqonaev.com/.netlify/functions/tekemet-admin';
+}
+
+function trackDishEventFallback(eventType, item, durationMs) {
+    if (!item || !item.id) return;
+    const body = JSON.stringify({
+        action: 'trackAnalyticsEvent',
+        restaurantSlug: 'tekemet-qonaev',
+        eventType,
+        menuItemId: item.id,
+        itemId: item.id,
+        dishId: item.id,
+        contentKey: item.contentKey || '',
+        dishTitle: item.titleRu || item.title || '',
+        dishTitleRu: item.titleRu || item.title || '',
+        sectionKey: item.sectionKey || '',
+        language: document.documentElement.lang === 'kk' ? 'kk' : (document.documentElement.lang || 'ru').slice(0, 2),
+        deviceType: getDeviceTypeFallback(),
+        sessionId: getAnalyticsSessionIdFallback(),
+        userAgent: navigator.userAgent || '',
+        referrer: document.referrer || '',
+        durationMs: Number(durationMs || 0),
+    });
+    const url = getAdminFunctionUrlFallback();
+
+    try {
+        if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) {
+            return;
+        }
+    } catch {}
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+    }).catch(() => {});
 }
 
 function renderDishModalContent(item) {
