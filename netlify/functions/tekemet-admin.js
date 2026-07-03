@@ -517,20 +517,17 @@ async function getAnalyticsEvents(env, slug, fromDate) {
 }
 
 async function writeAnalyticsEvent(env, slug, payload) {
-  if (shouldUseContentAnalyticsFallback(payload)) {
-    return writeFallbackAnalyticsEvent(env, payload);
-  }
-
   const restaurantId = await getRestaurantId(env, slug);
+  const packedDishReferrer = packDishAnalyticsReferrer(payload);
   const menuAnalyticsPayload = {
     ...(restaurantId ? { restaurant_id: restaurantId } : {}),
     event_type: payload.eventType,
-    menu_item_id: payload.menuItemId || null,
+    menu_item_id: shouldUsePrimaryMenuItemId(payload.menuItemId) ? payload.menuItemId : null,
     language: payload.language || null,
     device_type: payload.deviceType || null,
     session_id: payload.sessionId || null,
     user_agent: payload.userAgent || null,
-    referrer: payload.referrer || null,
+    referrer: packedDishReferrer || payload.referrer || null,
   };
 
   try {
@@ -559,7 +556,7 @@ async function readAnalyticsEvents(env, slug, fromDate) {
   try {
     const rows = await supabaseRest(env, "menu_analytics_events", {
       query: {
-        select: "id,event_type,menu_item_id,language,device_type,session_id,created_at",
+        select: "id,event_type,menu_item_id,language,device_type,session_id,referrer,user_agent,created_at",
         ...(restaurantId ? { restaurant_id: `eq.${restaurantId}` } : {}),
         ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
         order: "created_at.desc",
@@ -567,15 +564,24 @@ async function readAnalyticsEvents(env, slug, fromDate) {
       },
     });
 
-    const primaryRows = rows.map((row) => ({
-      id: row.id,
-      event_type: row.event_type,
-      menu_item_id: row.menu_item_id || null,
-      language: row.language || null,
-      device_type: row.device_type || null,
-      session_id: row.session_id || null,
-      created_at: row.created_at,
-    }));
+    const primaryRows = rows.map((row) => {
+      const packedDish = unpackDishAnalyticsReferrer(row.referrer);
+      return {
+        id: row.id,
+        event_type: row.event_type,
+        menu_item_id: row.menu_item_id || packedDish?.dishId || null,
+        content_key: packedDish?.contentKey || null,
+        dish_title: packedDish?.title || null,
+        section_key: packedDish?.section || null,
+        duration_ms: Number(packedDish?.durationMs || 0) || null,
+        language: row.language || null,
+        device_type: row.device_type || null,
+        session_id: row.session_id || null,
+        referrer: row.referrer || null,
+        user_agent: row.user_agent || null,
+        created_at: row.created_at,
+      };
+    });
     const fallbackRows = await readFallbackAnalyticsEvents(env, fromDate);
     return mergeAnalyticsEvents(primaryRows, fallbackRows);
   } catch (menuAnalyticsError) {
@@ -720,10 +726,47 @@ async function resolveAnalyticsContentItemId(env, menuItemId, contentKey = "") {
   }
 }
 
+function shouldUsePrimaryMenuItemId(value) {
+  const normalized = clean(value);
+  return Boolean(normalized && /^[1-9]\d*$/.test(normalized));
+}
+
 function shouldUseContentAnalyticsFallback(payload) {
   if (payload.eventType !== "dish_open" && payload.eventType !== "dish_close") return false;
   const menuItemId = clean(payload.menuItemId);
   return Boolean(menuItemId && !/^[1-9]\d*$/.test(menuItemId));
+}
+
+function packDishAnalyticsReferrer(payload) {
+  if (!payload || (payload.eventType !== "dish_open" && payload.eventType !== "dish_close")) return "";
+  const dishId = cleanLimited(payload.menuItemId || payload.contentKey, 160) || "";
+  const contentKey = cleanLimited(payload.contentKey, 160) || "";
+  const title = cleanLimited(payload.dishTitle, 240) || "";
+  const section = cleanLimited(payload.sectionKey, 120) || "";
+  const price = cleanLimited(payload.price, 80) || "";
+  const currency = cleanLimited(payload.currency, 16) || "";
+  const durationMs = cleanLimited(payload.durationMs, 40) || "";
+  const encoded = Buffer.from(JSON.stringify({ dishId, contentKey, title, section, price, currency, durationMs }), "utf8").toString("base64url");
+  return `dish:${encoded}`;
+}
+
+function unpackDishAnalyticsReferrer(value) {
+  const raw = clean(value);
+  if (!raw.startsWith("dish:")) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw.slice(5), "base64url").toString("utf8"));
+    return {
+      dishId: cleanLimited(parsed.dishId, 160) || "",
+      contentKey: cleanLimited(parsed.contentKey, 160) || "",
+      title: cleanLimited(parsed.title, 240) || "",
+      section: cleanLimited(parsed.section, 120) || "",
+      price: cleanLimited(parsed.price, 80) || "",
+      currency: cleanLimited(parsed.currency, 16) || "",
+      durationMs: cleanLimited(parsed.durationMs, 40) || "",
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function writeFallbackAnalyticsEvent(env, payload) {
