@@ -17,10 +17,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/tekemet-admin.css?v=12" />
+    <link rel="stylesheet" href="css/tekemet-admin.css?v=13" />
     <link rel="stylesheet" href="css/tekemet-admin-navigation.css?v=1" />
     <script defer src="js/tekemet-admin-api.js?v=2"></script>
-    <script defer src="js/tekemet-admin.js?v=10"></script>
+    <script defer src="js/tekemet-admin.js?v=11"></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -343,6 +343,21 @@
         <h2 data-category-dialog-title>Новая категория</h2>
         <label>Название категории<input name="name" maxlength="80" autocomplete="off" required /></label>
         <div><button type="button" class="secondary-button compact" data-close-category>Отмена</button><button type="submit" class="primary-button compact">Сохранить</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="confirm-dialog category-split-dialog" data-category-split-dialog>
+      <form class="settings-form category-split-form" data-category-split-form novalidate>
+        <p class="kicker">Безопасное разделение</p>
+        <h2>Разделить раздел</h2>
+        <p class="category-split-copy">Создайте два новых раздела и распределите каждое блюдо. Старый раздел не будет изменен, пока перенос не пройдет успешно.</p>
+        <label>Исходный раздел<select name="source_category_id" required data-split-source></select></label>
+        <div class="dual-field-grid category-split-targets">
+          <label>Первый новый раздел<input name="target_one_name_ru" maxlength="80" autocomplete="off" placeholder="Холодные закуски" required /></label>
+          <label>Второй новый раздел<input name="target_two_name_ru" maxlength="80" autocomplete="off" placeholder="Горячие закуски" required /></label>
+        </div>
+        <div class="category-split-items" data-category-split-items></div>
+        <div><button type="button" class="secondary-button compact" data-close-category-split>Отмена</button><button type="submit" class="primary-button compact">Сохранить разделение</button></div>
       </form>
     </dialog>
 

@@ -130,6 +130,18 @@ function trackDishClose(item, durationMs) {
     trackDishEventFallback('dish_close', item, durationMs);
 }
 
+function trackDishPhotoOpen(item) {
+    if (window.TekemetContentSync && typeof window.TekemetContentSync.trackDishPhotoOpen === 'function') {
+        try {
+            window.TekemetContentSync.trackDishPhotoOpen(item);
+            return;
+        } catch (error) {
+            console.warn('[tekemet-menu] dish_photo_open primary tracker failed', error);
+        }
+    }
+    trackDishEventFallback('dish_photo_open', item);
+}
+
 function getAnalyticsSessionIdFallback() {
     try {
         const key = 'tekemet.analytics.session';
@@ -232,6 +244,71 @@ function renderDishModalContent(item) {
     ].join('');
 }
 
+function ensureDishImageViewer() {
+    let overlay = document.getElementById('menuDishImageViewer');
+    if (overlay) {
+        return overlay;
+    }
+
+    overlay = document.createElement('div');
+    overlay.className = 'dish-image-viewer';
+    overlay.id = 'menuDishImageViewer';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = [
+        '<button class="dish-image-viewer__backdrop" type="button" data-close-dish-image aria-label="Закрыть фото"></button>',
+        '<figure class="dish-image-viewer__content" role="dialog" aria-modal="true" aria-label="Фото блюда">',
+        '  <button class="dish-image-viewer__close" type="button" data-close-dish-image aria-label="Закрыть фото">&times;</button>',
+        '  <img data-dish-image-viewer-img alt="">',
+        '  <figcaption data-dish-image-viewer-title></figcaption>',
+        '</figure>'
+    ].join('');
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+function openDishImageViewer(trigger) {
+    const imageUrl = trigger?.getAttribute('data-image-url') || '';
+    if (!imageUrl) {
+        return;
+    }
+
+    const contentId = trigger.getAttribute('data-content-id') || trigger.closest('[data-menu-dish-card]')?.getAttribute('data-content-id') || '';
+    const item = getDishModalItem(contentId) || {
+        id: contentId,
+        title: trigger.getAttribute('data-image-title') || '',
+        titleRu: trigger.getAttribute('data-image-title') || ''
+    };
+    const title = item.titleRu || item.title || trigger.getAttribute('data-image-title') || 'Фото блюда';
+    const overlay = ensureDishImageViewer();
+    const image = overlay.querySelector('[data-dish-image-viewer-img]');
+    const caption = overlay.querySelector('[data-dish-image-viewer-title]');
+
+    image.src = imageUrl;
+    image.alt = title;
+    caption.textContent = title;
+    overlay.classList.add('is-open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    trackDishPhotoOpen(item);
+}
+
+function closeDishImageViewer() {
+    const overlay = document.getElementById('menuDishImageViewer');
+    if (!overlay) {
+        return false;
+    }
+
+    const wasOpen = overlay.classList.contains('is-open');
+    overlay.classList.remove('is-open');
+    overlay.setAttribute('aria-hidden', 'true');
+    const image = overlay.querySelector('[data-dish-image-viewer-img]');
+    if (image) image.removeAttribute('src');
+    if (!isServiceModalOpen() && !document.getElementById('menuDishModal')?.classList.contains('is-open')) {
+        document.body.classList.remove('modal-open');
+    }
+    return wasOpen;
+}
+
 function openDishModal(contentId) {
     const item = getDishModalItem(contentId);
     if (!item) {
@@ -282,9 +359,23 @@ function closeDishModal() {
 }
 
 document.addEventListener('click', (event) => {
+    const imageCloseButton = event.target.closest('[data-close-dish-image]');
+    if (imageCloseButton) {
+        closeDishImageViewer();
+        return;
+    }
+
     const closeButton = event.target.closest('[data-close-dish-modal]');
     if (closeButton) {
         closeDishModal();
+        return;
+    }
+
+    const imageTrigger = event.target.closest('[data-image-url]');
+    if (imageTrigger) {
+        event.preventDefault();
+        event.stopPropagation();
+        openDishImageViewer(imageTrigger);
         return;
     }
 
@@ -298,7 +389,16 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-        closeDishModal();
+        if (!closeDishImageViewer()) {
+            closeDishModal();
+        }
+        return;
+    }
+
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('[data-image-url]')) {
+        event.preventDefault();
+        event.stopPropagation();
+        openDishImageViewer(event.target.closest('[data-image-url]'));
         return;
     }
 

@@ -284,7 +284,7 @@
                         let html = '<div class="menu-item' + (hasImage ? ' has-image' : '') + (isTextOnlySection ? ' menu-item--text-only' : '') + '" role="button" tabindex="0" data-menu-dish-card data-content-id="' + escapeHtml(record.id) + '" data-content-key="' + escapeHtml(record.content_key) + '">';
 
                         if (!isTextOnlySection) {
-                            html += '<div class="menu-item__media' + (hasImage ? ' menu-item__media--clickable' : '') + '"' + (hasImage ? ' data-content-id="' + escapeHtml(record.id) + '" data-image-url="' + escapeHtml(imageUrl) + '" data-image-title="' + escapeHtml(title) + '"' : '') + '>';
+                            html += '<div class="menu-item__media' + (hasImage ? ' menu-item__media--clickable' : '') + '"' + (hasImage ? ' role="button" tabindex="0" aria-label="Открыть фото блюда ' + escapeHtml(title) + '" data-content-id="' + escapeHtml(record.id) + '" data-image-url="' + escapeHtml(imageUrl) + '" data-image-title="' + escapeHtml(title) + '"' : '') + '>';
                             if (hasImage) {
                                 html += '<img class="menu-item__image" src="' + escapeHtml(imageUrl) + '" alt="' + escapeHtml(title) + '" loading="lazy" decoding="async">';
                             } else {
@@ -663,12 +663,37 @@
         });
     }
 
+    function trackDishPhotoOpen(itemOrId) {
+        const item = itemOrId && typeof itemOrId === 'object'
+            ? itemOrId
+            : (window.TekemetMenuItemsById || {})[String(itemOrId || '')] || null;
+        const menuItemId = item?.id || itemOrId || null;
+        if (!menuItemId) return;
+
+        trackMenuEvent('dish_photo_open', {
+            menuItemId,
+            itemId: menuItemId,
+            dishId: menuItemId,
+            contentKey: item?.contentKey || '',
+            dishTitle: item?.titleRu || item?.title || '',
+            dishTitleRu: item?.titleRu || item?.title || '',
+            dishCategory: item?.sectionTitle || item?.sectionKey || '',
+            sectionKey: item?.sectionKey || '',
+            dishPrice: item?.rawPrice || item?.price || '',
+            price: item?.rawPrice || item?.price || '',
+            currency: item?.currency || 'KZT',
+            restaurantSlug: RESTAURANT_SLUG,
+            timestamp: new Date().toISOString()
+        });
+    }
+
     window.TekemetContentSync = {
         refresh: loadAndRender,
         locale,
         getMenuItem: (id) => (window.TekemetMenuItemsById || {})[String(id || '')] || null,
         trackDishOpen,
-        trackDishClose
+        trackDishClose,
+        trackDishPhotoOpen
     };
 })();
 

@@ -96,11 +96,12 @@ async function handleRequest(request, env) {
       if (action === "getData") return getData(env, restaurantSlug);
       if (action === "translate" || action === "translateMissing") return translate(env, action, body, restaurantSlug);
       if (action === "saveItem") return saveItem(env, restaurantSlug, body.item);
-      if (action === "deleteItem") return deleteItem(env, restaurantSlug, body.itemId);
+      if (action === "deleteItem") return await deleteItem(env, restaurantSlug, body.itemId);
       if (action === "toggleStock") return toggleStock(env, restaurantSlug, body.itemId, body.is_stoplisted);
       if (action === "uploadItemPhoto") return uploadItemPhoto(env, restaurantSlug, body.itemId, body.imageData);
       if (action === "uploadMenuHeroPhoto") return uploadMenuHeroPhoto(env, restaurantSlug, body.imageData);
       if (action === "saveCategory") return saveCategory(env, restaurantSlug, body.category);
+      if (action === "splitCategory") return splitCategory(env, restaurantSlug, body.split || body);
       if (action === "sortCategories") return sortCategories(env, restaurantSlug, body.categories || []);
       if (action === "getAnalytics") return getAnalytics(env, restaurantSlug, body.range || "today");
       if (action === "deleteCategory") return deleteCategory(env, restaurantSlug, body.categoryId);
@@ -149,9 +150,10 @@ async function getPublicContent(env, contentType) {
 
 async function buildAdminData(env, slug) {
   const contentItems = await getMenuContentItems(env);
+  const archivedSections = await getArchivedCategoryKeys(env);
   const menuHero = contentItems.find(isMenuHeroContentItem) || null;
   const dishItems = contentItems.filter((item) => !isMenuHeroContentItem(item));
-  const categories = buildContentCategories(dishItems);
+  const categories = buildContentCategories(dishItems, archivedSections);
   const items = dishItems.map(mapContentItemToAdminItem);
 
   return {
@@ -160,6 +162,21 @@ async function buildAdminData(env, slug) {
     items,
     menuHero: menuHero ? mapContentItemToAdminItem(menuHero) : null,
   };
+}
+
+async function getArchivedCategoryKeys(env) {
+  try {
+    const rows = await supabaseRest(env, "content_items", {
+      query: {
+        select: "section_key",
+        content_type: "eq.admin_category_archive",
+        is_active: "eq.true",
+      },
+    });
+    return new Set(rows.map((row) => sanitizeSectionKey(row.section_key || "")).filter(Boolean));
+  } catch {
+    return new Set();
+  }
 }
 
 async function saveItem(env, slug, item) {
@@ -215,13 +232,23 @@ async function saveItem(env, slug, item) {
 }
 
 async function deleteItem(env, slug, itemId) {
-  await getContentItem(env, itemId);
-  await supabaseRest(env, "content_items", {
-    method: "PATCH",
-    query: { id: `eq.${itemId}`, content_type: "eq.menu" },
-    body: { is_active: false, inactive_until: null },
+  const current = await getContentItem(env, itemId);
+  if (isMenuHeroContentItem(current)) {
+    throw new Error("Главное фото меню нельзя удалить как блюдо.");
+  }
+
+  const rows = await supabaseRest(env, "content_items", {
+    method: "DELETE",
+    query: { id: `eq.${itemId}`, content_type: "eq.menu", select: "id" },
+    prefer: "return=representation",
   });
-  return jsonResponse(200, { ok: true });
+
+  const deletedId = rows[0]?.id ? String(rows[0].id) : "";
+  if (deletedId !== String(itemId)) {
+    throw new Error("Блюдо не было удалено из базы данных.");
+  }
+
+  return jsonResponse(200, { ok: true, deletedItemId: deletedId });
 }
 
 async function toggleStock(env, slug, itemId, isStoplisted) {
@@ -298,7 +325,9 @@ async function saveCategory(env, slug, category) {
     throw new Error("RU category name is required.");
   }
 
-  return jsonResponse(200, { category: normalizeVirtualCategory(category) });
+  const normalizedCategory = normalizeVirtualCategory(category);
+  await unarchiveCategoryKey(env, normalizedCategory.section_key);
+  return jsonResponse(200, { category: normalizedCategory });
 }
 
 async function deleteCategory(env, slug, categoryId) {
@@ -326,6 +355,135 @@ async function sortItems(env, slug, items) {
 
 async function sortCategories(env, slug, categories) {
   return getData(env, slug);
+}
+
+async function splitCategory(env, slug, split) {
+  const rawSourceKey = clean(split?.sourceCategoryId || split?.sourceSectionKey || split?.source_key || "");
+  if (!rawSourceKey) throw new Error("Выберите исходный раздел.");
+  const sourceKey = sanitizeSectionKey(rawSourceKey);
+
+  const allItems = (await getMenuContentItems(env)).filter((item) => !isMenuHeroContentItem(item));
+  const sourceItems = allItems.filter((item) => sanitizeSectionKey(item.section_key || "") === sourceKey);
+  if (!sourceItems.length) {
+    throw new Error("В исходном разделе нет блюд для переноса.");
+  }
+
+  const usedKeys = new Set(allItems.map((item) => sanitizeSectionKey(item.section_key || "")).filter(Boolean));
+  const targets = normalizeSplitTargets(split?.targets || split?.newCategories || [], usedKeys, sourceKey);
+  if (targets.length !== 2) {
+    throw new Error("Создайте два новых раздела.");
+  }
+
+  const assignments = normalizeSplitAssignments(split?.assignments || split?.itemAssignments || []);
+  const targetByClientId = new Map(targets.map((target) => [target.clientId, target]));
+  const sourceIds = sourceItems.map((item) => String(item.id));
+  const missingIds = sourceIds.filter((id) => !assignments.has(id) || !targetByClientId.has(assignments.get(id)));
+  if (missingIds.length) {
+    throw new Error("Распределите все блюда по новым разделам.");
+  }
+
+  const targetCounts = targets.reduce((acc, target) => ({ ...acc, [target.clientId]: 0 }), {});
+  for (const itemId of sourceIds) {
+    targetCounts[assignments.get(itemId)] += 1;
+  }
+  if (Object.values(targetCounts).some((count) => count === 0)) {
+    throw new Error("В каждом новом разделе должно быть хотя бы одно блюдо.");
+  }
+
+  const originals = sourceItems.map((item) => ({
+    id: item.id,
+    section_key: item.section_key || sourceKey,
+    sort_order: Number(item.sort_order || 0),
+  }));
+  const moved = [];
+
+  try {
+    for (const original of originals) {
+      const target = targetByClientId.get(assignments.get(String(original.id)));
+      await supabaseRest(env, "content_items", {
+        method: "PATCH",
+        query: { id: `eq.${original.id}`, content_type: "eq.menu" },
+        body: { section_key: target.section_key },
+        prefer: "return=minimal",
+      });
+      moved.push(original);
+    }
+
+    const verifyRows = await getMenuContentItems(env);
+    const verifyMap = new Map(verifyRows.map((item) => [String(item.id), sanitizeSectionKey(item.section_key || "")]));
+    const failed = originals.some((original) => {
+      const target = targetByClientId.get(assignments.get(String(original.id)));
+      return verifyMap.get(String(original.id)) !== target.section_key;
+    });
+    if (failed) throw new Error("Не удалось проверить перенос блюд.");
+
+    await archiveCategoryKey(env, sourceKey);
+  } catch (error) {
+    for (const original of moved) {
+      try {
+        await supabaseRest(env, "content_items", {
+          method: "PATCH",
+          query: { id: `eq.${original.id}`, content_type: "eq.menu" },
+          body: { section_key: original.section_key, sort_order: original.sort_order },
+          prefer: "return=minimal",
+        });
+      } catch (rollbackError) {
+        console.warn("[tekemet-admin-function] split rollback failed", rollbackError?.message || rollbackError);
+      }
+    }
+    throw new Error(error?.message || "Не удалось разделить раздел. Блюда оставлены в исходном разделе.");
+  }
+
+  return getData(env, slug);
+}
+
+async function archiveCategoryKey(env, sectionKey) {
+  const normalizedKey = sanitizeSectionKey(sectionKey);
+  const existing = await supabaseRest(env, "content_items", {
+    query: {
+      select: "id,is_active",
+      content_type: "eq.admin_category_archive",
+      section_key: `eq.${normalizedKey}`,
+      limit: "1",
+    },
+  });
+  if (existing[0]?.id) {
+    if (existing[0].is_active !== false) return;
+    await supabaseRest(env, "content_items", {
+      method: "PATCH",
+      query: { id: `eq.${existing[0].id}`, content_type: "eq.admin_category_archive" },
+      body: { is_active: true },
+      prefer: "return=minimal",
+    });
+    return;
+  }
+
+  await supabaseRest(env, "content_items", {
+    method: "POST",
+    body: [{
+      content_type: "admin_category_archive",
+      section_key: normalizedKey,
+      content_key: `archive-${normalizedKey}`,
+      title_ru: normalizedKey,
+      is_active: true,
+      sort_order: Math.floor(Date.now() / 1000),
+    }],
+    prefer: "return=minimal",
+  });
+}
+
+async function unarchiveCategoryKey(env, sectionKey) {
+  const normalizedKey = sanitizeSectionKey(sectionKey);
+  try {
+    await supabaseRest(env, "content_items", {
+      method: "PATCH",
+      query: { content_type: "eq.admin_category_archive", section_key: `eq.${normalizedKey}` },
+      body: { is_active: false },
+      prefer: "return=minimal",
+    });
+  } catch {
+    // Archive markers are best-effort and should not block category editing.
+  }
 }
 
 async function translate(env, action, body, slug) {
@@ -369,7 +527,7 @@ async function trackAnalyticsEvent(env, slug, body) {
     if (!eventType) return jsonResponse(200, { ok: true, tracked: false });
 
     const rawMenuItemId = body.menuItemId || body.itemId || body.dishId || "";
-    const menuItemId = eventType === "dish_open" || eventType === "dish_close"
+    const menuItemId = ["dish_open", "dish_close", "dish_photo_open"].includes(eventType)
       ? (await resolveAnalyticsContentItemId(env, rawMenuItemId, body.contentKey || body.content_key)) || cleanLimited(rawMenuItemId, 160)
       : null;
     const tracked = await writeAnalyticsEvent(env, slug, {
@@ -419,7 +577,11 @@ async function getAnalytics(env, slug, range = "today") {
   ));
   const dishCounts = countBy(selectedDishOpens.filter((event) => event.menu_item_id), "menu_item_id");
   const todayDishCounts = countBy(todayDishOpens.filter((event) => event.menu_item_id), "menu_item_id");
-  const dishIds = Array.from(new Set([...Object.keys(dishCounts), ...Object.keys(todayDishCounts)]));
+  const recentDishIds = selectedEvents
+    .filter((event) => ["dish_open", "dish_photo_open"].includes(event.event_type))
+    .map((event) => event.menu_item_id || event.content_key)
+    .filter(Boolean);
+  const dishIds = Array.from(new Set([...Object.keys(dishCounts), ...Object.keys(todayDishCounts), ...recentDishIds]));
   const dishNames = await getContentDishNames(env, dishIds);
 
   return jsonResponse(200, {
@@ -735,13 +897,13 @@ function shouldUsePrimaryMenuItemId(value) {
 }
 
 function shouldUseContentAnalyticsFallback(payload) {
-  if (payload.eventType !== "dish_open" && payload.eventType !== "dish_close") return false;
+  if (!["dish_open", "dish_close", "dish_photo_open"].includes(payload.eventType)) return false;
   const menuItemId = clean(payload.menuItemId);
   return Boolean(menuItemId && !/^[1-9]\d*$/.test(menuItemId));
 }
 
 function packDishAnalyticsReferrer(payload) {
-  if (!payload || (payload.eventType !== "dish_open" && payload.eventType !== "dish_close")) return "";
+  if (!payload || !["dish_open", "dish_close", "dish_photo_open"].includes(payload.eventType)) return "";
   const dishId = cleanLimited(payload.menuItemId || payload.contentKey, 160) || "";
   const contentKey = cleanLimited(payload.contentKey, 160) || "";
   const title = cleanLimited(payload.dishTitle, 240) || "";
@@ -844,10 +1006,11 @@ function isMenuHeroContentItem(item) {
     || title === "menu-hero";
 }
 
-function buildContentCategories(items) {
+function buildContentCategories(items, archivedSections = new Set()) {
   const seen = new Set(items.map((item) => sanitizeSectionKey(item.section_key || "mains")));
   DEFAULT_SECTION_ORDER.forEach((section) => seen.add(section));
   return Array.from(seen)
+    .filter((sectionKey) => !archivedSections.has(sectionKey))
     .map((sectionKey) => ({
       id: sectionKey,
       section_key: sectionKey,
@@ -896,6 +1059,54 @@ function normalizeVirtualCategory(category) {
     sort_order: Number(category.sort_order || category.sort || getSectionSort(id)),
     is_active: category.is_active !== false && category.active !== false,
   };
+}
+
+function normalizeSplitTargets(rawTargets, usedKeys, sourceKey) {
+  const targets = Array.isArray(rawTargets) ? rawTargets.slice(0, 2) : [];
+  const nextUsed = new Set([...(usedKeys || []), sourceKey]);
+  return targets.map((target, index) => {
+    const name = clean(target?.name_ru || target?.title_ru || target?.name || "");
+    if (!name) throw new Error("Укажите названия двух новых разделов.");
+    const sectionKey = makeUniqueSectionKey(target?.section_key || target?.id || name, nextUsed, index + 1);
+    nextUsed.add(sectionKey);
+    return {
+      clientId: clean(target?.clientId || target?.client_id || target?.id || `target-${index + 1}`),
+      section_key: sectionKey,
+      name_ru: name,
+    };
+  });
+}
+
+function normalizeSplitAssignments(rawAssignments) {
+  const map = new Map();
+  if (Array.isArray(rawAssignments)) {
+    rawAssignments.forEach((entry) => {
+      const itemId = clean(entry?.itemId || entry?.item_id || entry?.id);
+      const targetId = clean(entry?.targetClientId || entry?.target_client_id || entry?.targetId || entry?.target_id);
+      if (itemId && targetId) map.set(itemId, targetId);
+    });
+    return map;
+  }
+
+  if (rawAssignments && typeof rawAssignments === "object") {
+    Object.entries(rawAssignments).forEach(([itemId, targetId]) => {
+      const cleanItemId = clean(itemId);
+      const cleanTargetId = clean(targetId);
+      if (cleanItemId && cleanTargetId) map.set(cleanItemId, cleanTargetId);
+    });
+  }
+  return map;
+}
+
+function makeUniqueSectionKey(value, usedKeys, suffix) {
+  const base = sanitizeSectionKey(value || `section-${suffix}`);
+  let candidate = base;
+  let counter = 2;
+  while (!candidate || usedKeys.has(candidate)) {
+    candidate = `${base || "section"}-${counter}`;
+    counter += 1;
+  }
+  return candidate;
 }
 
 function sanitizeSectionKey(value) {
@@ -1195,7 +1406,7 @@ function cleanLimited(value, maxLength) {
 
 function normalizeEventType(value) {
   const normalized = clean(value);
-  return ["menu_open", "dish_open", "dish_close", "language_change"].includes(normalized) ? normalized : "";
+  return ["menu_open", "dish_open", "dish_close", "dish_photo_open", "language_change"].includes(normalized) ? normalized : "";
 }
 
 function normalizeDeviceType(value) {
@@ -1607,6 +1818,10 @@ function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME
       const dishName = dishNames[event.menu_item_id] || dishNames[event.content_key] || event.dish_title || getAnalyticsDishFallbackTitle(event.menu_item_id || event.content_key);
       label = `\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 ${dishName}`;
     }
+    if (event.event_type === "dish_photo_open") {
+      const dishName = dishNames[event.menu_item_id] || dishNames[event.content_key] || event.dish_title || getAnalyticsDishFallbackTitle(event.menu_item_id || event.content_key);
+      label = `\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u0444\u043e\u0442\u043e \u0431\u043b\u044e\u0434\u0430: ${dishName}`;
+    }
     if (event.event_type === "language_change") label = `\u0421\u043c\u0435\u043d\u0438\u043b\u0438 \u044f\u0437\u044b\u043a \u043d\u0430 ${String(event.language || "").toUpperCase() || "\u0434\u0440\u0443\u0433\u043e\u0439"}`;
     return {
       type: event.event_type,
@@ -1620,7 +1835,7 @@ function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME
 function selectRecentEventsForDisplay(events) {
   const visibleEvents = (events || []).filter((event) => event.event_type !== "dish_close");
   const latest = visibleEvents.slice(0, 7);
-  const latestDishOpens = visibleEvents.filter((event) => event.event_type === "dish_open").slice(0, 3);
+  const latestDishOpens = visibleEvents.filter((event) => ["dish_open", "dish_photo_open"].includes(event.event_type)).slice(0, 3);
   const seen = new Set();
   return [...latest, ...latestDishOpens]
     .filter((event) => {
@@ -1706,8 +1921,18 @@ function cleanIntegerOrNull(value) {
   return Math.round(parsed);
 }
 
+function transliterateCyrillic(value) {
+  const map = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
+    к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+    х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ы: "y", э: "e", ю: "yu", я: "ya", ь: "", ъ: "",
+    ә: "a", ғ: "g", қ: "k", ң: "n", ө: "o", ұ: "u", ү: "u", һ: "h", і: "i",
+  };
+  return String(value || "").replace(/[А-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]/g, (char) => map[char.toLowerCase()] ?? "");
+}
+
 function slugify(value) {
-  return String(value || "item")
+  return transliterateCyrillic(value || "item")
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[^\w\s-]/g, "")

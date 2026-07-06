@@ -722,6 +722,87 @@ body.dark-theme .menu-item:hover {
     box-shadow: 0 0 0 3px rgba(148, 193, 202, 0.55);
 }
 
+.dish-image-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: clamp(16px, 4vw, 48px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+}
+
+.dish-image-viewer.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.dish-image-viewer__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 13, 24, 0.72);
+    border: 0;
+    cursor: zoom-out;
+}
+
+.dish-image-viewer__content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 14px;
+    width: min(920px, 100%);
+    margin: 0;
+    transform: translateY(10px) scale(0.985);
+    transition: transform 220ms ease;
+}
+
+.dish-image-viewer.is-open .dish-image-viewer__content {
+    transform: none;
+}
+
+.dish-image-viewer__content img {
+    display: block;
+    width: 100%;
+    max-height: calc(100vh - 150px);
+    object-fit: contain;
+    background: #0f172a;
+    border-radius: 28px;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.32);
+}
+
+.dish-image-viewer__content figcaption {
+    justify-self: center;
+    max-width: min(680px, 100%);
+    padding: 10px 16px;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    font-weight: 800;
+    text-align: center;
+    backdrop-filter: blur(12px);
+}
+
+.dish-image-viewer__close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 2;
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    color: #111827;
+    background: rgba(255, 255, 255, 0.92);
+    border: 0;
+    border-radius: 999px;
+    font-size: 28px;
+    line-height: 1;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+}
+
 .menu-item__media--clickable img {
     transition: transform 0.35s ease;
 }
@@ -751,6 +832,17 @@ body.dark-theme .menu-item:hover {
     font-weight: 600;
     letter-spacing: 2px;
     text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+    .dish-image-viewer {
+        padding: 12px;
+    }
+
+    .dish-image-viewer__content img {
+        max-height: calc(100vh - 120px);
+        border-radius: 22px;
+    }
 }
 
 .menu-item__header h3 {

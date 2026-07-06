@@ -61,6 +61,9 @@ const el = {
   categoryDialog: document.querySelector("[data-category-dialog]"),
   categoryForm: document.querySelector("[data-category-form]"),
   categoryDialogTitle: document.querySelector("[data-category-dialog-title]"),
+  categorySplitDialog: document.querySelector("[data-category-split-dialog]"),
+  categorySplitForm: document.querySelector("[data-category-split-form]"),
+  categorySplitItems: document.querySelector("[data-category-split-items]"),
   toasts: document.querySelector("[data-toast-stack]"),
 };
 
@@ -416,6 +419,7 @@ function renderCategories() {
         <button type="button" data-move-category="${category.id}" data-direction="-1">↑</button>
         <button type="button" data-move-category="${category.id}" data-direction="1">↓</button>
         <button type="button" data-edit-category="${category.id}">Изменить</button>
+        <button type="button" data-split-category="${category.id}">Разделить</button>
       </div>
     </article>`;
   }).join("");
@@ -1176,6 +1180,106 @@ async function moveCategory(id, direction) {
   }
 }
 
+function getCategoryItems(categoryId) {
+  return state.items.filter((item) => item.category_id === categoryId && !isMenuHeroItem(item));
+}
+
+function renderCategorySplitItems() {
+  if (!el.categorySplitForm || !el.categorySplitItems) return;
+  const sourceId = el.categorySplitForm.elements.source_category_id.value;
+  const items = getCategoryItems(sourceId);
+  const firstName = el.categorySplitForm.elements.target_one_name_ru.value.trim() || "Первый раздел";
+  const secondName = el.categorySplitForm.elements.target_two_name_ru.value.trim() || "Второй раздел";
+
+  if (!items.length) {
+    el.categorySplitItems.innerHTML = `<div class="empty-state category-split-empty"><h2>В разделе нет блюд</h2><p>Выберите раздел, в котором есть блюда для переноса.</p></div>`;
+    return;
+  }
+
+  el.categorySplitItems.innerHTML = `
+    <div class="category-split-heading">
+      <strong>Распределите блюда</strong>
+      <span>${items.length} позиций</span>
+    </div>
+    <div class="category-split-list">
+      ${items.map((item) => `
+        <article class="category-split-item">
+          <div>
+            <strong>${escapeHtml(getItemDisplayName(item))}</strong>
+            <small>${escapeHtml([categoryName(item.category_id), shouldShowItemPrice(item) ? formatPrice(item.price, item.currency) : ""].filter(Boolean).join(" · "))}</small>
+          </div>
+          <div class="category-split-choice" role="radiogroup" aria-label="Новый раздел для ${escapeHtml(getItemDisplayName(item))}">
+            <label><input type="radio" name="split_item_${escapeHtml(item.id)}" value="one" required /><span>${escapeHtml(firstName)}</span></label>
+            <label><input type="radio" name="split_item_${escapeHtml(item.id)}" value="two" required /><span>${escapeHtml(secondName)}</span></label>
+          </div>
+        </article>
+      `).join("")}
+    </div>`;
+}
+
+function openCategorySplitDialog(categoryId) {
+  if (!el.categorySplitDialog || !el.categorySplitForm) return;
+  el.categorySplitForm.reset();
+  const selectedId = state.categories.some((category) => category.id === categoryId) ? categoryId : state.categories[0]?.id || "";
+  el.categorySplitForm.elements.source_category_id.innerHTML = state.categories
+    .map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(getCategoryDisplayName(category))}</option>`)
+    .join("");
+  el.categorySplitForm.elements.source_category_id.value = selectedId;
+  renderCategorySplitItems();
+  el.categorySplitDialog.showModal();
+  el.categorySplitForm.elements.target_one_name_ru.focus();
+}
+
+async function handleCategorySplitSubmit(event) {
+  event.preventDefault();
+  if (!el.categorySplitForm) return;
+
+  const form = el.categorySplitForm;
+  const sourceCategoryId = form.elements.source_category_id.value;
+  const oneName = form.elements.target_one_name_ru.value.trim();
+  const twoName = form.elements.target_two_name_ru.value.trim();
+  const items = getCategoryItems(sourceCategoryId);
+
+  if (!sourceCategoryId) return toast("Выберите исходный раздел", "danger");
+  if (!oneName || !twoName) return toast("Укажите названия двух новых разделов", "danger");
+  if (oneName.toLowerCase() === twoName.toLowerCase()) return toast("Названия новых разделов должны отличаться", "danger");
+  if (!items.length) return toast("В исходном разделе нет блюд для переноса", "danger");
+
+  const assignments = [];
+  for (const item of items) {
+    const selected = form.querySelector(`input[name="split_item_${escapeCssIdentifier(item.id)}"]:checked`);
+    if (!selected) {
+      toast("Распределите все блюда по новым разделам", "danger");
+      return;
+    }
+    assignments.push({ itemId: item.id, targetClientId: selected.value });
+  }
+
+  if (!assignments.some((entry) => entry.targetClientId === "one") || !assignments.some((entry) => entry.targetClientId === "two")) {
+    toast("В каждом новом разделе должно быть хотя бы одно блюдо", "danger");
+    return;
+  }
+
+  try {
+    const result = await adminApi("splitCategory", {
+      split: {
+        sourceCategoryId,
+        targets: [
+          { clientId: "one", name_ru: oneName },
+          { clientId: "two", name_ru: twoName },
+        ],
+        assignments,
+      },
+    });
+    applyAdminData(result);
+    el.categorySplitDialog.close();
+    toast("Раздел успешно разделен", "success");
+    navigate("categories");
+  } catch (error) {
+    toast(error.message || "Не удалось разделить раздел", "danger");
+  }
+}
+
 async function handleBulkUploads(files) {
   const targets = state.items.filter((item) => !item.image).slice(0, files.length);
   if (!targets.length) {
@@ -1225,6 +1329,7 @@ function handleDocumentClick(event) {
   const attention = event.target.closest("[data-attention-view]")?.dataset.attentionView;
   const toggleCat = event.target.closest("[data-toggle-category]")?.dataset.toggleCategory;
   const editCat = event.target.closest("[data-edit-category]")?.dataset.editCategory;
+  const splitCat = event.target.closest("[data-split-category]")?.dataset.splitCategory;
   const move = event.target.closest("[data-move-category]");
   const analyticsRange = event.target.closest("[data-analytics-range]")?.dataset.analyticsRange;
   const analyticsDay = event.target.closest("[data-analytics-day]")?.dataset.analyticsDay;
@@ -1255,6 +1360,7 @@ function handleDocumentClick(event) {
   if (event.target.closest("[data-close-drawer]")) closeDrawer();
   if (toggleCat) toggleCategory(toggleCat);
   if (editCat) editCategory(editCat);
+  if (splitCat) openCategorySplitDialog(splitCat);
   if (move) moveCategory(move.dataset.moveCategory, Number(move.dataset.direction));
   if (event.target.closest("[data-remove-editor-image]")) removeEditorImage();
   if (event.target.closest("[data-translate-current-item]")) translateCurrentItem();
@@ -1302,6 +1408,13 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeCssIdentifier(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(String(value));
+  }
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
 }
 
 function firstFilledValue(...values) {
@@ -1732,7 +1845,10 @@ function handleDeleteItem() {
   if (!id) return;
   confirmAction("Удалить блюдо?", "Это действие нельзя отменить.", async () => {
     try {
-      await adminApi("deleteItem", { itemId: id });
+      const result = await adminApi("deleteItem", { itemId: id });
+      if (!result?.ok || String(result.deletedItemId || "") !== String(id)) {
+        throw new Error("Блюдо не было удалено из базы данных.");
+      }
       state.items = state.items.filter((item) => item.id !== id);
       state.dirty = false;
       toast("Блюдо удалено", "success");
@@ -1850,6 +1966,12 @@ function bindEvents() {
 
   el.categoryForm.addEventListener("submit", handleCategorySubmit);
   document.querySelector("[data-close-category]").addEventListener("click", () => el.categoryDialog.close());
+  el.categorySplitForm?.addEventListener("submit", handleCategorySplitSubmit);
+  el.categorySplitForm?.addEventListener("input", (event) => {
+    if (event.target.matches("[name='target_one_name_ru'], [name='target_two_name_ru']")) renderCategorySplitItems();
+  });
+  el.categorySplitForm?.elements.source_category_id?.addEventListener("change", renderCategorySplitItems);
+  document.querySelector("[data-close-category-split]")?.addEventListener("click", () => el.categorySplitDialog?.close());
 
   document.querySelectorAll("[data-lang-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
