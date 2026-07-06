@@ -17,10 +17,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/tekemet-admin.css?v=10" />
+    <link rel="stylesheet" href="css/tekemet-admin.css?v=12" />
     <link rel="stylesheet" href="css/tekemet-admin-navigation.css?v=1" />
     <script defer src="js/tekemet-admin-api.js?v=2"></script>
-    <script defer src="js/tekemet-admin.js?v=9"></script>
+    <script defer src="js/tekemet-admin.js?v=10"></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -164,8 +164,8 @@
               </article>
             </div>
 
-            <div class="analytics-main-grid">
-              <article class="analytics-card analytics-card--wide">
+            <div class="analytics-insights-grid">
+              <article class="analytics-card popular-dishes-card">
                 <div class="analytics-card-head">
                   <div><p class="kicker">Интерес гостей</p><h2>Популярные блюда</h2></div>
                 </div>
@@ -178,7 +178,29 @@
                 </div>
               </article>
 
-              <article class="analytics-card analytics-card--wide">
+              <article class="analytics-card guest-languages-card">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Языки</p><h2>Языки гостей</h2></div>
+                </div>
+                <div class="analytics-option-list">
+                  <span>RU</span><span>KZ</span><span>EN</span>
+                </div>
+                <p class="analytics-muted">Пока нет данных</p>
+              </article>
+
+              <article class="analytics-card analytics-card--compact guest-devices-card">
+                <div class="analytics-card-head">
+                  <div><p class="kicker">Устройства</p><h2>Устройства гостей</h2></div>
+                </div>
+                <div class="analytics-option-list">
+                  <span>Телефон</span><span>Планшет</span><span>Компьютер</span>
+                </div>
+                <p class="analytics-muted">Пока нет данных</p>
+              </article>
+            </div>
+
+            <div class="analytics-main-grid">
+              <article class="analytics-card analytics-card--wide analytics-card--activity">
                 <div class="analytics-card-head">
                   <div><p class="kicker">Активность</p><h2>Посещения по времени</h2></div>
                 </div>
@@ -195,25 +217,6 @@
             </div>
 
             <div class="analytics-secondary-grid">
-              <article class="analytics-card">
-                <div class="analytics-card-head">
-                  <div><p class="kicker">Языки</p><h2>Языки гостей</h2></div>
-                </div>
-                <div class="analytics-option-list">
-                  <span>RU</span><span>KZ</span><span>EN</span>
-                </div>
-                <p class="analytics-muted">Пока нет данных</p>
-              </article>
-
-              <article class="analytics-card">
-                <div class="analytics-card-head">
-                  <div><p class="kicker">Устройства</p><h2>Устройства гостей</h2></div>
-                </div>
-                <div class="analytics-option-list">
-                  <span>Телефон</span><span>Планшет</span><span>Компьютер</span>
-                </div>
-                <p class="analytics-muted">Пока нет данных</p>
-              </article>
 
               <article class="analytics-card">
                 <div class="analytics-card-head">
@@ -240,7 +243,7 @@
 
     <aside class="drawer" data-drawer aria-hidden="true">
       <button class="drawer-backdrop" type="button" data-close-drawer aria-label="Закрыть"></button>
-      <form class="drawer-panel" data-item-form>
+      <form class="drawer-panel" data-item-form novalidate>
         <header><div><p class="kicker">Карточка блюда</p><h2 data-drawer-title>Новое блюдо</h2></div><button type="button" data-close-drawer aria-label="Закрыть">×</button></header>
         <div class="drawer-body">
           <input type="hidden" name="id" />
@@ -287,7 +290,7 @@
                   <strong class="editor-status-badge is-sale" data-editor-status-badge>В продаже</strong>
                 </div>
                 <div class="dual-field-grid">
-                  <label>Цена<input name="price" type="number" min="0" required /></label>
+                  <label data-price-field>Цена<input name="price" type="number" min="0" required /></label>
                   <label>Категория<select name="category_id" required></select></label>
                 </div>
                 <div class="sales-status-row">
@@ -314,7 +317,7 @@
                 <summary>Дополнительная информация</summary>
                 <div class="accordion-body">
                   <div class="dual-field-grid">
-                    <label>Старая цена<input name="old_price" type="number" min="0" step="1" inputmode="numeric" /></label>
+                    <label data-old-price-field>Старая цена<input name="old_price" type="number" min="0" step="1" inputmode="numeric" /></label>
                     <label>Вес / порция<input name="weight" type="text" maxlength="40" /></label>
                     <label>Калории<input name="calories" type="number" min="0" step="1" inputmode="numeric" /></label>
                     <label>Острота<select name="spice_level">

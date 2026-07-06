@@ -179,7 +179,10 @@ async function saveItem(env, slug, item) {
     imageData = { image_url: "", image_path: "" };
   }
 
-  const sectionKey = sanitizeSectionKey(item.category_id || item.section_key || current?.section_key || "mains");
+  const rawSectionKey = clean(item.category_id || item.section_key || current?.section_key || "");
+  if (!rawSectionKey) throw new Error("Выберите раздел для карточки");
+  const sectionKey = sanitizeSectionKey(rawSectionKey);
+  const isHotelBreakfast = isHotelBreakfastSectionKey(sectionKey);
   const contentKey = current?.content_key || item.content_key || buildContentKey(sectionKey, item.name_ru);
   const payload = {
     content_type: "menu",
@@ -191,7 +194,7 @@ async function saveItem(env, slug, item) {
     description_ru: clean(item.description_ru),
     description_kk: clean(item.description_kz),
     description_en: clean(item.description_en),
-    price: Number(item.price || 0),
+    price: isHotelBreakfast ? null : Number(item.price || 0),
     currency: item.currency || "KZT",
     is_active: item.is_stoplisted === true ? false : item.is_active !== false,
     inactive_until: item.inactive_until || null,
@@ -805,9 +808,11 @@ function getVirtualRestaurant(slug) {
 function mapContentItemToAdminItem(item) {
   const isTemporarilyInactive = Boolean(item.inactive_until && new Date(item.inactive_until).getTime() > Date.now());
   const isStoplisted = item.is_active === false || isTemporarilyInactive;
+  const sectionKey = sanitizeSectionKey(item.section_key || "mains");
+  const isHotelBreakfast = isHotelBreakfastSectionKey(sectionKey);
   return {
     ...item,
-    category_id: sanitizeSectionKey(item.section_key || "mains"),
+    category_id: sectionKey,
     name_ru: item.title_ru || "",
     name_kz: item.title_kk || "",
     name_en: item.title_en || "",
@@ -815,6 +820,7 @@ function mapContentItemToAdminItem(item) {
     description_kz: item.description_kk || "",
     description_en: item.description_en || "",
     currency: item.currency || "KZT",
+    price: isHotelBreakfast ? null : Number(item.price || 0),
     image_url: item.image_url || "",
     image_path: item.image_path || "",
     is_active: item.is_active !== false,
@@ -894,6 +900,11 @@ function normalizeVirtualCategory(category) {
 
 function sanitizeSectionKey(value) {
   return slugify(value || "mains") || "mains";
+}
+
+function isHotelBreakfastSectionKey(value) {
+  const sectionKey = sanitizeSectionKey(value || "");
+  return sectionKey === "hotel-breakfasts" || sectionKey === "hotel-breakfast";
 }
 
 function buildContentKey(sectionKey, title) {

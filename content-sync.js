@@ -118,9 +118,15 @@
         return title ? title.textContent.trim() : '';
     }
 
+    function isHotelBreakfastSection(sectionKey) {
+        const normalized = String(sectionKey || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+        return normalized === 'hotel-breakfasts' || normalized === 'hotel-breakfast';
+    }
+
     function normalizeMenuPopupItem(record, client) {
         const imageUrl = resolveImageUrl(record, client);
-        const oldPrice = normalizeOptionalNumber(record.old_price);
+        const isHotelBreakfast = isHotelBreakfastSection(record.section_key);
+        const oldPrice = isHotelBreakfast ? null : normalizeOptionalNumber(record.old_price);
         const calories = normalizeOptionalNumber(record.calories);
         const badge = localeField(record, 'badge');
         const tags = parseList(record.tags || record.tag_list || record.badges);
@@ -135,8 +141,8 @@
             title,
             titleRu: record.title_ru || record.title_kk || record.title_en || record.content_key || '',
             description: localeField(record, 'description'),
-            price: formatPrice(record.price, record.currency),
-            rawPrice: record.price ?? '',
+            price: isHotelBreakfast ? '' : formatPrice(record.price, record.currency),
+            rawPrice: isHotelBreakfast ? '' : record.price ?? '',
             currency: record.currency || 'KZT',
             oldPrice: oldPrice ? formatPrice(oldPrice, record.currency) : '',
             weight: String(record.weight || record.portion || record.volume || '').trim(),
@@ -258,10 +264,10 @@
                     .map((record) => {
                         const title = localeField(record, 'title') || 'Блюдо';
                         const description = localeField(record, 'description');
-                        const price = formatPrice(record.price, record.currency);
+                        const isTextOnlySection = isHotelBreakfastSection(sectionKey);
+                        const price = isTextOnlySection ? '' : formatPrice(record.price, record.currency);
                         const imageUrl = resolveImageUrl(record, client);
                         const hasImage = Boolean(imageUrl);
-                        const isTextOnlySection = sectionKey === 'hotel-breakfasts';
 
                         const isDrinkSubsectionHeading = sectionKey === 'drinks'
                             && !price
