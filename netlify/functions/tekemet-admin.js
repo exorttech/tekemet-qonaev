@@ -93,19 +93,19 @@ async function handleRequest(request, env) {
         return jsonResponse(401, { error: "Admin session expired. Sign in again." });
       }
 
-      if (action === "getData") return getData(env, restaurantSlug);
-      if (action === "translate" || action === "translateMissing") return translate(env, action, body, restaurantSlug);
-      if (action === "saveItem") return saveItem(env, restaurantSlug, body.item);
+      if (action === "getData") return await getData(env, restaurantSlug);
+      if (action === "translate" || action === "translateMissing") return await translate(env, action, body, restaurantSlug);
+      if (action === "saveItem") return await saveItem(env, restaurantSlug, body.item);
       if (action === "deleteItem") return await deleteItem(env, restaurantSlug, body.itemId);
-      if (action === "toggleStock") return toggleStock(env, restaurantSlug, body.itemId, body.is_stoplisted);
-      if (action === "uploadItemPhoto") return uploadItemPhoto(env, restaurantSlug, body.itemId, body.imageData);
-      if (action === "uploadMenuHeroPhoto") return uploadMenuHeroPhoto(env, restaurantSlug, body.imageData);
-      if (action === "saveCategory") return saveCategory(env, restaurantSlug, body.category);
-      if (action === "splitCategory") return splitCategory(env, restaurantSlug, body.split || body);
-      if (action === "sortCategories") return sortCategories(env, restaurantSlug, body.categories || []);
-      if (action === "getAnalytics") return getAnalytics(env, restaurantSlug, body.range || "today");
-      if (action === "deleteCategory") return deleteCategory(env, restaurantSlug, body.categoryId);
-      if (action === "sortItems") return sortItems(env, restaurantSlug, body.items || []);
+      if (action === "toggleStock") return await toggleStock(env, restaurantSlug, body.itemId, body.is_stoplisted);
+      if (action === "uploadItemPhoto") return await uploadItemPhoto(env, restaurantSlug, body.itemId, body.imageData);
+      if (action === "uploadMenuHeroPhoto") return await uploadMenuHeroPhoto(env, restaurantSlug, body.imageData);
+      if (action === "saveCategory") return await saveCategory(env, restaurantSlug, body.category);
+      if (action === "splitCategory") return await splitCategory(env, restaurantSlug, body.split || body);
+      if (action === "sortCategories") return await sortCategories(env, restaurantSlug, body.categories || []);
+      if (action === "getAnalytics") return await getAnalytics(env, restaurantSlug, body.range || "today");
+      if (action === "deleteCategory") return await deleteCategory(env, restaurantSlug, body.categoryId);
+      if (action === "sortItems") return await sortItems(env, restaurantSlug, body.items || []);
 
       return jsonResponse(400, { error: "Unknown Exort admin action." });
     } catch (error) {
@@ -150,10 +150,9 @@ async function getPublicContent(env, contentType) {
 
 async function buildAdminData(env, slug) {
   const contentItems = await getMenuContentItems(env);
-  const archivedSections = await getArchivedCategoryKeys(env);
   const menuHero = contentItems.find(isMenuHeroContentItem) || null;
   const dishItems = contentItems.filter((item) => !isMenuHeroContentItem(item));
-  const categories = buildContentCategories(dishItems, archivedSections);
+  const categories = buildContentCategories(dishItems);
   const items = dishItems.map(mapContentItemToAdminItem);
 
   return {
@@ -162,21 +161,6 @@ async function buildAdminData(env, slug) {
     items,
     menuHero: menuHero ? mapContentItemToAdminItem(menuHero) : null,
   };
-}
-
-async function getArchivedCategoryKeys(env) {
-  try {
-    const rows = await supabaseRest(env, "content_items", {
-      query: {
-        select: "section_key",
-        content_type: "eq.admin_category_archive",
-        is_active: "eq.true",
-      },
-    });
-    return new Set(rows.map((row) => sanitizeSectionKey(row.section_key || "")).filter(Boolean));
-  } catch {
-    return new Set();
-  }
 }
 
 async function saveItem(env, slug, item) {
@@ -325,9 +309,7 @@ async function saveCategory(env, slug, category) {
     throw new Error("RU category name is required.");
   }
 
-  const normalizedCategory = normalizeVirtualCategory(category);
-  await unarchiveCategoryKey(env, normalizedCategory.section_key);
-  return jsonResponse(200, { category: normalizedCategory });
+  return jsonResponse(200, { category: normalizeVirtualCategory(category) });
 }
 
 async function deleteCategory(env, slug, categoryId) {
@@ -417,7 +399,6 @@ async function splitCategory(env, slug, split) {
     });
     if (failed) throw new Error("Не удалось проверить перенос блюд.");
 
-    await archiveCategoryKey(env, sourceKey);
   } catch (error) {
     for (const original of moved) {
       try {
@@ -435,55 +416,6 @@ async function splitCategory(env, slug, split) {
   }
 
   return getData(env, slug);
-}
-
-async function archiveCategoryKey(env, sectionKey) {
-  const normalizedKey = sanitizeSectionKey(sectionKey);
-  const existing = await supabaseRest(env, "content_items", {
-    query: {
-      select: "id,is_active",
-      content_type: "eq.admin_category_archive",
-      section_key: `eq.${normalizedKey}`,
-      limit: "1",
-    },
-  });
-  if (existing[0]?.id) {
-    if (existing[0].is_active !== false) return;
-    await supabaseRest(env, "content_items", {
-      method: "PATCH",
-      query: { id: `eq.${existing[0].id}`, content_type: "eq.admin_category_archive" },
-      body: { is_active: true },
-      prefer: "return=minimal",
-    });
-    return;
-  }
-
-  await supabaseRest(env, "content_items", {
-    method: "POST",
-    body: [{
-      content_type: "admin_category_archive",
-      section_key: normalizedKey,
-      content_key: `archive-${normalizedKey}`,
-      title_ru: normalizedKey,
-      is_active: true,
-      sort_order: Math.floor(Date.now() / 1000),
-    }],
-    prefer: "return=minimal",
-  });
-}
-
-async function unarchiveCategoryKey(env, sectionKey) {
-  const normalizedKey = sanitizeSectionKey(sectionKey);
-  try {
-    await supabaseRest(env, "content_items", {
-      method: "PATCH",
-      query: { content_type: "eq.admin_category_archive", section_key: `eq.${normalizedKey}` },
-      body: { is_active: false },
-      prefer: "return=minimal",
-    });
-  } catch {
-    // Archive markers are best-effort and should not block category editing.
-  }
 }
 
 async function translate(env, action, body, slug) {
@@ -1006,11 +938,10 @@ function isMenuHeroContentItem(item) {
     || title === "menu-hero";
 }
 
-function buildContentCategories(items, archivedSections = new Set()) {
+function buildContentCategories(items) {
   const seen = new Set(items.map((item) => sanitizeSectionKey(item.section_key || "mains")));
   DEFAULT_SECTION_ORDER.forEach((section) => seen.add(section));
   return Array.from(seen)
-    .filter((sectionKey) => !archivedSections.has(sectionKey))
     .map((sectionKey) => ({
       id: sectionKey,
       section_key: sectionKey,
@@ -1923,12 +1854,15 @@ function cleanIntegerOrNull(value) {
 
 function transliterateCyrillic(value) {
   const map = {
-    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
-    к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
-    х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ы: "y", э: "e", ю: "yu", я: "ya", ь: "", ъ: "",
-    ә: "a", ғ: "g", қ: "k", ң: "n", ө: "o", ұ: "u", ү: "u", һ: "h", і: "i",
+    "\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g", "\u0434": "d", "\u0435": "e", "\u0451": "e",
+    "\u0436": "zh", "\u0437": "z", "\u0438": "i", "\u0439": "y", "\u043a": "k", "\u043b": "l", "\u043c": "m",
+    "\u043d": "n", "\u043e": "o", "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t", "\u0443": "u",
+    "\u0444": "f", "\u0445": "h", "\u0446": "c", "\u0447": "ch", "\u0448": "sh", "\u0449": "sch",
+    "\u044b": "y", "\u044d": "e", "\u044e": "yu", "\u044f": "ya", "\u044c": "", "\u044a": "",
+    "\u04d9": "a", "\u0493": "g", "\u049b": "k", "\u04a3": "n", "\u04e9": "o", "\u04b1": "u",
+    "\u04af": "u", "\u04bb": "h", "\u0456": "i",
   };
-  return String(value || "").replace(/[А-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]/g, (char) => map[char.toLowerCase()] ?? "");
+  return String(value || "").replace(/[\u0400-\u04ff]/g, (char) => map[char.toLowerCase()] ?? "");
 }
 
 function slugify(value) {
