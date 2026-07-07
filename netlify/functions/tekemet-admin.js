@@ -104,7 +104,7 @@ async function handleRequest(request, env) {
       if (action === "splitCategory") return await splitCategory(env, restaurantSlug, body.split || body);
       if (action === "sortCategories") return await sortCategories(env, restaurantSlug, body.categories || []);
       if (action === "getAnalytics") return await getAnalytics(env, restaurantSlug, body.range || "today");
-      if (action === "deleteCategory") return await deleteCategory(env, restaurantSlug, body.categoryId);
+      if (action === "deleteCategory") return await deleteCategory(env, restaurantSlug, body.categoryId, body.targetCategoryId);
       if (action === "sortItems") return await sortItems(env, restaurantSlug, body.items || []);
 
       return jsonResponse(400, { error: "Unknown Exort admin action." });
@@ -143,16 +143,17 @@ async function getPublicContent(env, contentType) {
   });
 
   return jsonResponse(200, {
-    items: items.filter((item) => !isMenuHeroContentItem(item)),
+    items: items.filter((item) => !isMenuHeroContentItem(item) && !isCategoryArchiveContentItem(item)),
     menuHero: items.find(isMenuHeroContentItem) || null,
   });
 }
 
 async function buildAdminData(env, slug) {
   const contentItems = await getMenuContentItems(env);
+  const archivedSections = getArchivedCategoryKeys(contentItems);
   const menuHero = contentItems.find(isMenuHeroContentItem) || null;
-  const dishItems = contentItems.filter((item) => !isMenuHeroContentItem(item));
-  const categories = buildContentCategories(dishItems);
+  const dishItems = contentItems.filter((item) => !isMenuHeroContentItem(item) && !isCategoryArchiveContentItem(item));
+  const categories = buildContentCategories(dishItems, archivedSections);
   const items = dishItems.map(mapContentItemToAdminItem);
 
   return {
@@ -309,16 +310,24 @@ async function saveCategory(env, slug, category) {
     throw new Error("RU category name is required.");
   }
 
-  return jsonResponse(200, { category: normalizeVirtualCategory(category) });
+  const normalizedCategory = normalizeVirtualCategory(category);
+  await unarchiveCategoryKey(env, normalizedCategory.section_key);
+  return jsonResponse(200, { category: normalizedCategory });
 }
 
-async function deleteCategory(env, slug, categoryId) {
+async function deleteCategory(env, slug, categoryId, targetCategoryId = "") {
   const sectionKey = sanitizeSectionKey(categoryId);
-  await supabaseRest(env, "content_items", {
-    method: "PATCH",
-    query: { content_type: "eq.menu", section_key: `eq.${sectionKey}` },
-    body: { is_active: false, inactive_until: null },
-  });
+  const targetKey = clean(targetCategoryId) ? sanitizeSectionKey(targetCategoryId) : "";
+  const allItems = (await getMenuContentItems(env)).filter((item) => !isMenuHeroContentItem(item) && !isCategoryArchiveContentItem(item));
+  const sourceItems = allItems.filter((item) => sanitizeSectionKey(item.section_key || "") === sectionKey);
+
+  if (sourceItems.length) {
+    if (!targetKey) throw new Error("Выберите раздел для переноса блюд.");
+    if (targetKey === sectionKey) throw new Error("Выберите другой раздел для переноса блюд.");
+    await moveCategoryItems(env, sourceItems, targetKey);
+  }
+
+  await archiveCategoryKey(env, sectionKey);
   return getData(env, slug);
 }
 
@@ -344,7 +353,7 @@ async function splitCategory(env, slug, split) {
   if (!rawSourceKey) throw new Error("Выберите исходный раздел.");
   const sourceKey = sanitizeSectionKey(rawSourceKey);
 
-  const allItems = (await getMenuContentItems(env)).filter((item) => !isMenuHeroContentItem(item));
+  const allItems = (await getMenuContentItems(env)).filter((item) => !isMenuHeroContentItem(item) && !isCategoryArchiveContentItem(item));
   const sourceItems = allItems.filter((item) => sanitizeSectionKey(item.section_key || "") === sourceKey);
   if (!sourceItems.length) {
     throw new Error("В исходном разделе нет блюд для переноса.");
@@ -416,6 +425,89 @@ async function splitCategory(env, slug, split) {
   }
 
   return getData(env, slug);
+}
+
+async function moveCategoryItems(env, items, targetSectionKey) {
+  const originals = items.map((item) => ({
+    id: item.id,
+    section_key: item.section_key,
+    sort_order: Number(item.sort_order || 0),
+  }));
+  const moved = [];
+
+  try {
+    for (const original of originals) {
+      await supabaseRest(env, "content_items", {
+        method: "PATCH",
+        query: { id: `eq.${original.id}`, content_type: "eq.menu" },
+        body: { section_key: targetSectionKey },
+        prefer: "return=minimal",
+      });
+      moved.push(original);
+    }
+
+    const verifyRows = await getMenuContentItems(env);
+    const verifyMap = new Map(verifyRows.map((item) => [String(item.id), sanitizeSectionKey(item.section_key || "")]));
+    if (originals.some((original) => verifyMap.get(String(original.id)) !== targetSectionKey)) {
+      throw new Error("Не удалось проверить перенос блюд.");
+    }
+  } catch (error) {
+    for (const original of moved) {
+      try {
+        await supabaseRest(env, "content_items", {
+          method: "PATCH",
+          query: { id: `eq.${original.id}`, content_type: "eq.menu" },
+          body: { section_key: original.section_key, sort_order: original.sort_order },
+          prefer: "return=minimal",
+        });
+      } catch (rollbackError) {
+        console.warn("[tekemet-admin-function] category delete rollback failed", rollbackError?.message || rollbackError);
+      }
+    }
+    throw error;
+  }
+}
+
+async function archiveCategoryKey(env, sectionKey) {
+  const normalizedKey = sanitizeSectionKey(sectionKey);
+  const contentKey = `category_archive_${normalizedKey}`;
+  const existing = await supabaseRest(env, "content_items", {
+    query: {
+      select: "id",
+      content_type: "eq.menu",
+      content_key: `eq.${contentKey}`,
+      limit: "1",
+    },
+  });
+
+  const payload = {
+    content_type: "menu",
+    section_key: "category_archive",
+    content_key: contentKey,
+    title_ru: normalizedKey,
+    description_ru: normalizedKey,
+    currency: "KZT",
+    is_active: false,
+    sort_order: 0,
+  };
+
+  await supabaseRest(env, "content_items", {
+    method: existing[0]?.id ? "PATCH" : "POST",
+    query: existing[0]?.id
+      ? { id: `eq.${existing[0].id}`, content_type: "eq.menu" }
+      : {},
+    body: existing[0]?.id ? payload : [payload],
+    prefer: "return=minimal",
+  });
+}
+
+async function unarchiveCategoryKey(env, sectionKey) {
+  const normalizedKey = sanitizeSectionKey(sectionKey);
+  await supabaseRest(env, "content_items", {
+    method: "DELETE",
+    query: { content_type: "eq.menu", content_key: `eq.category_archive_${normalizedKey}` },
+    prefer: "return=minimal",
+  }).catch(() => {});
 }
 
 async function translate(env, action, body, slug) {
@@ -938,10 +1030,24 @@ function isMenuHeroContentItem(item) {
     || title === "menu-hero";
 }
 
-function buildContentCategories(items) {
+function isCategoryArchiveContentItem(item) {
+  const contentKey = clean(item?.content_key).toLowerCase();
+  const sectionKey = clean(item?.section_key).toLowerCase();
+  return sectionKey === "category_archive" || contentKey.startsWith("category_archive_");
+}
+
+function getArchivedCategoryKeys(items) {
+  return new Set((items || [])
+    .filter(isCategoryArchiveContentItem)
+    .map((item) => sanitizeSectionKey(item.description_ru || String(item.content_key || "").replace(/^category_archive_/, "")))
+    .filter(Boolean));
+}
+
+function buildContentCategories(items, archivedSections = new Set()) {
   const seen = new Set(items.map((item) => sanitizeSectionKey(item.section_key || "mains")));
   DEFAULT_SECTION_ORDER.forEach((section) => seen.add(section));
   return Array.from(seen)
+    .filter((sectionKey) => !archivedSections.has(sectionKey))
     .map((sectionKey) => ({
       id: sectionKey,
       section_key: sectionKey,

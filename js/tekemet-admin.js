@@ -18,6 +18,7 @@ const state = {
   analyticsDrilldownDate: "",
   analytics: null,
   analyticsLoading: false,
+  pendingActions: new Set(),
 };
 
 const el = {
@@ -64,6 +65,13 @@ const el = {
   categorySplitDialog: document.querySelector("[data-category-split-dialog]"),
   categorySplitForm: document.querySelector("[data-category-split-form]"),
   categorySplitItems: document.querySelector("[data-category-split-items]"),
+  categoryDetailDialog: document.querySelector("[data-category-detail-dialog]"),
+  categoryDetailRoot: document.querySelector("[data-category-detail-root]"),
+  categoryDeleteDialog: document.querySelector("[data-category-delete-dialog]"),
+  categoryDeleteForm: document.querySelector("[data-category-delete-form]"),
+  categoryDeleteTitle: document.querySelector("[data-category-delete-title]"),
+  categoryDeleteCopy: document.querySelector("[data-category-delete-copy]"),
+  categoryDeleteTarget: document.querySelector("[data-category-delete-target]"),
   toasts: document.querySelector("[data-toast-stack]"),
 };
 
@@ -411,15 +419,16 @@ function filteredItems() {
 function renderCategories() {
   el.categoryList.innerHTML = [...state.categories].sort((a, b) => a.sort - b.sort).map((category) => {
     const count = state.items.filter((item) => item.category_id === category.id).length;
-    return `<article class="category-row">
+    return `<article class="category-row category-row--clickable" role="button" tabindex="0" data-open-category="${category.id}">
       <span class="drag-handle">⋮⋮</span>
       <div><strong>${escapeHtml(getCategoryDisplayName(category))}</strong><small>${count} блюд</small></div>
-      <button class="stop-switch ${category.active ? "is-on" : ""}" type="button" data-toggle-category="${category.id}" aria-label="Активность категории"></button>
+      <button class="stop-switch ${category.active ? "is-on" : ""}" type="button" data-toggle-category="${category.id}" data-stop-row-click aria-label="Активность категории"></button>
       <div class="row-actions">
-        <button type="button" data-move-category="${category.id}" data-direction="-1">↑</button>
-        <button type="button" data-move-category="${category.id}" data-direction="1">↓</button>
-        <button type="button" data-edit-category="${category.id}">Изменить</button>
-        <button type="button" data-split-category="${category.id}">Разделить</button>
+        <button type="button" data-move-category="${category.id}" data-direction="-1" data-stop-row-click>↑</button>
+        <button type="button" data-move-category="${category.id}" data-direction="1" data-stop-row-click>↓</button>
+        <button type="button" data-edit-category="${category.id}" data-stop-row-click>Изменить</button>
+        <button type="button" data-split-category="${category.id}" data-stop-row-click>Разделить</button>
+        <button type="button" data-delete-category="${category.id}" data-stop-row-click>Удалить</button>
       </div>
     </article>`;
   }).join("");
@@ -685,15 +694,18 @@ function renderMenuHeroPanel() {
 
 async function handleMenuHeroFile(file) {
   if (!file) return;
-  try {
-    const imageData = await prepareImage(file);
-    const result = await adminApi("uploadMenuHeroPhoto", { imageData });
-    state.menuHero = result.menuHero ? normalizeItem(result.menuHero) : state.menuHero;
-    renderMenuHeroPanel();
-    toast("Главное фото меню обновлено", "success");
-  } catch (error) {
-    toast(toFriendlyError(error.message) || "Не удалось заменить главное фото меню", "danger");
-  }
+  const label = document.querySelector("[data-menu-hero-file]")?.closest("label");
+  await runOnce("menu-hero-photo", label, "Загружаем...", async () => {
+    try {
+      const imageData = await prepareImage(file);
+      const result = await adminApi("uploadMenuHeroPhoto", { imageData });
+      state.menuHero = result.menuHero ? normalizeItem(result.menuHero) : state.menuHero;
+      renderMenuHeroPanel();
+      toast("Главное фото меню обновлено", "success");
+    } catch (error) {
+      toast(toFriendlyError(error.message) || "Не удалось заменить главное фото меню", "danger");
+    }
+  });
 }
 function renderVisitsByWeek(weeks) {
   const normalizedWeeks = normalizeWeeks(weeks);
@@ -1126,58 +1138,64 @@ function editCategory(id) {
 
 async function handleCategorySubmit(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(el.categoryForm));
-  const existing = state.categories.find((entry) => entry.id === data.id);
-  const payload = {
-    id: existing?.id || "",
-    name_ru: data.name_ru.trim(),
-    name_kz: data.name_kz.trim(),
-    name_en: data.name_en.trim(),
-    sort_order: existing?.sort || (state.categories.length + 1) * 10,
-    is_active: existing?.active ?? true,
-  };
-  if (!payload.name_ru) return;
+  await runOnce("save-category", event.submitter, "Сохраняем...", async () => {
+    const data = Object.fromEntries(new FormData(el.categoryForm));
+    const existing = state.categories.find((entry) => entry.id === data.id);
+    const payload = {
+      id: existing?.id || "",
+      name_ru: data.name_ru.trim(),
+      name_kz: data.name_kz.trim(),
+      name_en: data.name_en.trim(),
+      sort_order: existing?.sort || (state.categories.length + 1) * 10,
+      is_active: existing?.active ?? true,
+    };
+    if (!payload.name_ru) return;
 
-  try {
-    const result = await adminApi("saveCategory", { category: payload });
-    upsertLocalCategory(result.category);
-    el.categoryDialog.close();
-    toast(existing ? "Категория обновлена" : "Категория добавлена", "success");
-    navigate("categories");
-    renderAll();
-  } catch (error) {
-    toast(error.message || "Не удалось сохранить категорию", "danger");
-  }
+    try {
+      const result = await adminApi("saveCategory", { category: payload });
+      upsertLocalCategory(result.category);
+      el.categoryDialog.close();
+      toast(existing ? "Категория обновлена" : "Категория добавлена", "success");
+      navigate("categories");
+      renderAll();
+    } catch (error) {
+      toast(error.message || "Не удалось сохранить категорию", "danger");
+    }
+  });
 }
 
-async function toggleCategory(id) {
+async function toggleCategory(id, button = null) {
   const category = state.categories.find((entry) => entry.id === id);
   if (!category) return;
-  try {
-    const result = await adminApi("saveCategory", { category: { ...category, is_active: !category.active, sort_order: category.sort } });
-    upsertLocalCategory(result.category);
-    toast("Статус категории обновлен", "success");
-    renderAll();
-  } catch (error) {
-    toast(error.message || "Не удалось обновить категорию", "danger");
-  }
+  await runOnce(`toggle-category:${id}`, button, "Обновляем...", async () => {
+    try {
+      const result = await adminApi("saveCategory", { category: { ...category, is_active: !category.active, sort_order: category.sort } });
+      upsertLocalCategory(result.category);
+      toast("Статус категории обновлен", "success");
+      renderAll();
+    } catch (error) {
+      toast(error.message || "Не удалось обновить категорию", "danger");
+    }
+  });
 }
 
-async function moveCategory(id, direction) {
+async function moveCategory(id, direction, button = null) {
   const sorted = [...state.categories].sort((a, b) => a.sort - b.sort);
   const index = sorted.findIndex((category) => category.id === id);
   const target = sorted[index + direction];
   if (!target) return;
   [sorted[index].sort, target.sort] = [target.sort, sorted[index].sort];
 
-  try {
-    await adminApi("sortCategories", { categories: sorted.map((category) => ({ id: category.id, sort_order: category.sort })) });
-    state.categories = sorted;
-    toast("Порядок категорий обновлен", "success");
-    renderAll();
-  } catch (error) {
-    toast(error.message || "Не удалось изменить порядок", "danger");
-  }
+  await runOnce(`move-category:${id}:${direction}`, button, "Двигаем...", async () => {
+    try {
+      await adminApi("sortCategories", { categories: sorted.map((category) => ({ id: category.id, sort_order: category.sort })) });
+      state.categories = sorted;
+      toast("Порядок категорий обновлен", "success");
+      renderAll();
+    } catch (error) {
+      toast(error.message || "Не удалось изменить порядок", "danger");
+    }
+  });
 }
 
 function getCategoryItems(categoryId) {
@@ -1230,93 +1248,210 @@ function openCategorySplitDialog(categoryId) {
   el.categorySplitForm.elements.target_one_name_ru.focus();
 }
 
+function renderCategoryDetail(categoryId) {
+  if (!el.categoryDetailRoot) return;
+  const category = state.categories.find((entry) => entry.id === categoryId);
+  if (!category) return;
+  const items = getCategoryItems(categoryId).sort((a, b) => a.sort_order - b.sort_order);
+  el.categoryDetailRoot.innerHTML = `
+    <div class="category-detail-header">
+      <div>
+        <p class="kicker">Категория</p>
+        <h2>${escapeHtml(getCategoryDisplayName(category))}</h2>
+        <p>${formatPositionCount(items.length)}</p>
+      </div>
+      <button class="icon-button" type="button" data-close-category-detail aria-label="Закрыть">×</button>
+    </div>
+    <div class="category-detail-actions">
+      <button class="secondary-button compact" type="button" data-edit-category="${escapeHtml(category.id)}">Изменить</button>
+      <button class="secondary-button compact" type="button" data-split-category="${escapeHtml(category.id)}">Разделить</button>
+      <button class="danger-button compact" type="button" data-delete-category="${escapeHtml(category.id)}">Удалить</button>
+    </div>
+    <div class="category-detail-items">
+      ${items.length ? items.map(renderCategoryDishCard).join("") : `<div class="empty-state category-detail-empty"><h2>В категории нет блюд</h2><p>Можно удалить категорию или добавить в неё новую карточку.</p></div>`}
+    </div>`;
+}
+
+function renderCategoryDishCard(item) {
+  const [statusClass, statusText] = status(item);
+  const isSale = !item.is_stoplisted && !isTemporarilyUnavailable(item) && item.is_active;
+  const meta = [shouldShowItemPrice(item) ? formatPrice(item.price, item.currency) : "", statusText].filter(Boolean).join(" · ");
+  return `<article class="category-dish-card ${statusClass !== "active" ? "is-muted" : ""}">
+    <div class="category-dish-thumb">${visual(item)}</div>
+    <div>
+      <strong>${escapeHtml(getItemDisplayName(item))}</strong>
+      <small>${escapeHtml(meta)}</small>
+    </div>
+    <div class="category-dish-actions">
+      <button type="button" class="secondary-button compact" data-edit-item="${escapeHtml(item.id)}">Изменить</button>
+      <button type="button" class="stock-control ${isSale ? "is-on" : ""}" data-toggle-stock="${escapeHtml(item.id)}" aria-label="${isSale ? "Перевести блюдо в стоп-лист" : "Вернуть блюдо в продажу"}">
+        <span>${isSale ? "В продаже" : "На стопе"}</span>
+        <i aria-hidden="true"></i>
+      </button>
+    </div>
+  </article>`;
+}
+
+function openCategoryDetail(categoryId) {
+  renderCategoryDetail(categoryId);
+  el.categoryDetailDialog?.showModal();
+}
+
+function closeCategoryDetail() {
+  el.categoryDetailDialog?.close();
+}
+
 async function handleCategorySplitSubmit(event) {
   event.preventDefault();
   if (!el.categorySplitForm) return;
+  await runOnce("split-category", event.submitter, "Разделяем...", async () => {
+    const form = el.categorySplitForm;
+    const sourceCategoryId = form.elements.source_category_id.value;
+    const oneName = form.elements.target_one_name_ru.value.trim();
+    const twoName = form.elements.target_two_name_ru.value.trim();
+    const items = getCategoryItems(sourceCategoryId);
 
-  const form = el.categorySplitForm;
-  const sourceCategoryId = form.elements.source_category_id.value;
-  const oneName = form.elements.target_one_name_ru.value.trim();
-  const twoName = form.elements.target_two_name_ru.value.trim();
-  const items = getCategoryItems(sourceCategoryId);
+    if (!sourceCategoryId) return toast("Выберите исходный раздел", "danger");
+    if (!oneName || !twoName) return toast("Укажите названия двух новых разделов", "danger");
+    if (oneName.toLowerCase() === twoName.toLowerCase()) return toast("Названия новых разделов должны отличаться", "danger");
+    if (!items.length) return toast("В исходном разделе нет блюд для переноса", "danger");
 
-  if (!sourceCategoryId) return toast("Выберите исходный раздел", "danger");
-  if (!oneName || !twoName) return toast("Укажите названия двух новых разделов", "danger");
-  if (oneName.toLowerCase() === twoName.toLowerCase()) return toast("Названия новых разделов должны отличаться", "danger");
-  if (!items.length) return toast("В исходном разделе нет блюд для переноса", "danger");
+    const assignments = [];
+    for (const item of items) {
+      const selected = form.querySelector(`input[name="split_item_${escapeCssIdentifier(item.id)}"]:checked`);
+      if (!selected) {
+        toast("Распределите все блюда по новым разделам", "danger");
+        return;
+      }
+      assignments.push({ itemId: item.id, targetClientId: selected.value });
+    }
 
-  const assignments = [];
-  for (const item of items) {
-    const selected = form.querySelector(`input[name="split_item_${escapeCssIdentifier(item.id)}"]:checked`);
-    if (!selected) {
-      toast("Распределите все блюда по новым разделам", "danger");
+    if (!assignments.some((entry) => entry.targetClientId === "one") || !assignments.some((entry) => entry.targetClientId === "two")) {
+      toast("В каждом новом разделе должно быть хотя бы одно блюдо", "danger");
       return;
     }
-    assignments.push({ itemId: item.id, targetClientId: selected.value });
+
+    try {
+      const result = await adminApi("splitCategory", {
+        split: {
+          sourceCategoryId,
+          targets: [
+            { clientId: "one", name_ru: oneName },
+            { clientId: "two", name_ru: twoName },
+          ],
+          assignments,
+        },
+      });
+      applyAdminData(result);
+      el.categorySplitDialog.close();
+      closeCategoryDetail();
+      toast("Раздел успешно разделен", "success");
+      navigate("categories");
+    } catch (error) {
+      toast(error.message || "Не удалось разделить раздел", "danger");
+    }
+  });
+}
+
+function openCategoryDeleteDialog(categoryId) {
+  if (!el.categoryDeleteDialog || !el.categoryDeleteForm) return;
+  const category = state.categories.find((entry) => entry.id === categoryId);
+  if (!category) return;
+  const items = getCategoryItems(categoryId);
+  const alternatives = state.categories.filter((entry) => entry.id !== categoryId);
+  el.categoryDeleteForm.reset();
+  el.categoryDeleteForm.elements.category_id.value = categoryId;
+  el.categoryDeleteTitle.textContent = `Удалить категорию «${getCategoryDisplayName(category)}»`;
+  const targetField = el.categoryDeleteForm.querySelector("[data-category-delete-target-field]");
+
+  if (items.length) {
+    el.categoryDeleteCopy.textContent = `В категории ${formatPositionCount(items.length)}. Перед удалением выберите раздел, куда перенести блюда.`;
+    targetField.hidden = false;
+    el.categoryDeleteTarget.required = true;
+    el.categoryDeleteTarget.innerHTML = `<option value="">Выберите раздел</option>${alternatives.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getCategoryDisplayName(entry))}</option>`).join("")}`;
+  } else {
+    el.categoryDeleteCopy.textContent = "Категория пустая. После удаления она больше не будет отображаться в админке.";
+    targetField.hidden = true;
+    el.categoryDeleteTarget.required = false;
+    el.categoryDeleteTarget.innerHTML = "";
   }
 
-  if (!assignments.some((entry) => entry.targetClientId === "one") || !assignments.some((entry) => entry.targetClientId === "two")) {
-    toast("В каждом новом разделе должно быть хотя бы одно блюдо", "danger");
-    return;
-  }
+  el.categoryDeleteDialog.showModal();
+}
 
-  try {
-    const result = await adminApi("splitCategory", {
-      split: {
-        sourceCategoryId,
-        targets: [
-          { clientId: "one", name_ru: oneName },
-          { clientId: "two", name_ru: twoName },
-        ],
-        assignments,
-      },
-    });
-    applyAdminData(result);
-    el.categorySplitDialog.close();
-    toast("Раздел успешно разделен", "success");
-    navigate("categories");
-  } catch (error) {
-    toast(error.message || "Не удалось разделить раздел", "danger");
-  }
+async function handleCategoryDeleteSubmit(event) {
+  event.preventDefault();
+  const submitter = event.submitter;
+  await runOnce("delete-category", submitter, "Удаляем...", async () => {
+    const categoryId = el.categoryDeleteForm.elements.category_id.value;
+    const targetCategoryId = el.categoryDeleteForm.elements.target_category_id?.value || "";
+    const items = getCategoryItems(categoryId);
+    if (items.length && !targetCategoryId) {
+      toast("Выберите раздел для переноса блюд", "danger");
+      el.categoryDeleteTarget.focus();
+      return;
+    }
+
+    try {
+      const result = await adminApi("deleteCategory", { categoryId, targetCategoryId });
+      applyAdminData(result);
+      el.categoryDeleteDialog.close();
+      closeCategoryDetail();
+      toast(items.length ? "Категория удалена, блюда перенесены" : "Категория удалена", "success");
+      navigate("categories");
+    } catch (error) {
+      toast(toFriendlyError(error.message) || "Не удалось удалить категорию", "danger");
+    }
+  });
 }
 
 async function handleBulkUploads(files) {
+  if (state.pendingActions.has("bulk-upload")) return;
   const targets = state.items.filter((item) => !item.image).slice(0, files.length);
   if (!targets.length) {
     toast("Нет блюд без фото", "success");
     return;
   }
 
-  for (const [index, file] of [...files].slice(0, targets.length).entries()) {
-    try {
-      const imageData = await prepareImage(file);
-      const result = await adminApi("uploadItemPhoto", { itemId: targets[index].id, imageData });
-      upsertLocalItem(result.item);
-      toast(`\u0424\u043e\u0442\u043e \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e: ${getItemDisplayName(result.item || targets[index])}`, "success");
-    } catch (error) {
-      toast(error.message || "Не удалось загрузить фото", "danger");
+  state.pendingActions.add("bulk-upload");
+  try {
+    for (const [index, file] of [...files].slice(0, targets.length).entries()) {
+      try {
+        const imageData = await prepareImage(file);
+        const result = await adminApi("uploadItemPhoto", { itemId: targets[index].id, imageData });
+        upsertLocalItem(result.item);
+        toast(`\u0424\u043e\u0442\u043e \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e: ${getItemDisplayName(result.item || targets[index])}`, "success");
+      } catch (error) {
+        toast(error.message || "Не удалось загрузить фото", "danger");
+      }
     }
+    renderAll();
+  } finally {
+    state.pendingActions.delete("bulk-upload");
   }
-  renderAll();
 }
 
 async function handleEditorFile() {
-  try {
-    const imageData = await prepareImage(el.editorFile.files[0]);
-    el.itemForm.dataset.pendingImage = imageData;
-    el.itemForm.dataset.image = imageData;
-    renderEditorImage(imageData);
-    state.dirty = true;
-  } catch (error) {
-    toast(error.message || "Не удалось подготовить фото", "danger");
-  }
+  await runOnce("editor-photo", el.editorFileLabel, "Готовим фото...", async () => {
+    try {
+      const imageData = await prepareImage(el.editorFile.files[0]);
+      el.itemForm.dataset.pendingImage = imageData;
+      el.itemForm.dataset.image = imageData;
+      renderEditorImage(imageData);
+      state.dirty = true;
+    } catch (error) {
+      toast(error.message || "Не удалось подготовить фото", "danger");
+    }
+  });
 }
 
-function removeEditorImage() {
-  el.itemForm.dataset.image = "";
-  el.itemForm.dataset.pendingImage = "";
-  renderEditorImage("");
-  state.dirty = true;
+function removeEditorImage(button = null) {
+  runOnce("remove-editor-photo", button, "Удаляем...", async () => {
+    el.itemForm.dataset.image = "";
+    el.itemForm.dataset.pendingImage = "";
+    renderEditorImage("");
+    state.dirty = true;
+  });
 }
 
 
@@ -1324,18 +1459,23 @@ function removeEditorImage() {
 function handleDocumentClick(event) {
   const nav = event.target.closest("[data-nav]");
   const action = event.target.closest("[data-action]")?.dataset.action;
-  const stock = event.target.closest("[data-toggle-stock]")?.dataset.toggleStock;
+  const stockButton = event.target.closest("[data-toggle-stock]");
+  const stock = stockButton?.dataset.toggleStock;
   const edit = event.target.closest("[data-edit-item]")?.dataset.editItem;
   const attention = event.target.closest("[data-attention-view]")?.dataset.attentionView;
-  const toggleCat = event.target.closest("[data-toggle-category]")?.dataset.toggleCategory;
+  const toggleCatButton = event.target.closest("[data-toggle-category]");
+  const toggleCat = toggleCatButton?.dataset.toggleCategory;
   const editCat = event.target.closest("[data-edit-category]")?.dataset.editCategory;
   const splitCat = event.target.closest("[data-split-category]")?.dataset.splitCategory;
+  const deleteCat = event.target.closest("[data-delete-category]")?.dataset.deleteCategory;
   const move = event.target.closest("[data-move-category]");
+  const openCategory = event.target.closest("[data-open-category]")?.dataset.openCategory;
   const analyticsRange = event.target.closest("[data-analytics-range]")?.dataset.analyticsRange;
   const analyticsDay = event.target.closest("[data-analytics-day]")?.dataset.analyticsDay;
   const analyticsBack = event.target.closest("[data-analytics-back]")?.dataset.analyticsBack;
 
   if (nav) navigate(nav.dataset.nav);
+  if (event.target.closest("[data-close-category-detail]")) closeCategoryDetail();
   if (analyticsRange) {
     state.analyticsRange = analyticsRange;
     state.analyticsDrilldownDate = "";
@@ -1353,19 +1493,24 @@ function handleDocumentClick(event) {
   if (action === "add-item") openItemDrawer();
   if (action === "add-category") addCategory();
   if (action === "open-stop-filter") openStopFilter();
-  if (stock) toggleStock(stock);
-  if (edit) openItemDrawer(edit);
+  if (stock) toggleStock(stock, stockButton);
+  if (edit) {
+    closeCategoryDetail();
+    openItemDrawer(edit);
+  }
   if (attention) navigate(attention);
   if (event.target.closest("[data-logout]")) logout();
   if (event.target.closest("[data-close-drawer]")) closeDrawer();
-  if (toggleCat) toggleCategory(toggleCat);
+  if (toggleCat) toggleCategory(toggleCat, toggleCatButton);
   if (editCat) editCategory(editCat);
   if (splitCat) openCategorySplitDialog(splitCat);
-  if (move) moveCategory(move.dataset.moveCategory, Number(move.dataset.direction));
-  if (event.target.closest("[data-remove-editor-image]")) removeEditorImage();
+  if (deleteCat) openCategoryDeleteDialog(deleteCat);
+  if (move) moveCategory(move.dataset.moveCategory, Number(move.dataset.direction), move);
+  if (event.target.closest("[data-remove-editor-image]")) removeEditorImage(event.target.closest("[data-remove-editor-image]"));
   if (event.target.closest("[data-translate-current-item]")) translateCurrentItem();
   if (event.target.closest("[data-translate-missing]")) translateMissingItems();
   if (event.target.closest("[data-toggle-preview]")) toggleMobilePreview();
+  if (openCategory && !isInteractiveCategoryClick(event)) openCategoryDetail(openCategory);
 }
 
 function openStopFilter() {
@@ -1398,6 +1543,51 @@ function confirmAction(title, text, action) {
   el.confirmTitle.textContent = title;
   el.confirmText.textContent = text;
   el.confirmDialog.showModal();
+}
+
+async function runPendingConfirm() {
+  const action = state.pendingConfirm;
+  if (!action) return;
+  const button = el.confirmDialog.querySelector('button[value="confirm"]');
+  await runOnce("confirm-action", button, "Выполняем...", async () => {
+    await action();
+  });
+}
+
+function setControlBusy(control, isBusy, busyText = "") {
+  if (!control) return;
+  const target = control.matches?.("button") ? control : control.querySelector?.("button, span") || control;
+  if (isBusy) {
+    if (!target.dataset.idleHtml) target.dataset.idleHtml = target.innerHTML;
+    if (busyText) target.textContent = busyText;
+    control.disabled = true;
+    control.setAttribute("aria-busy", "true");
+    control.classList?.add("is-loading");
+  } else {
+    if (target.dataset.idleHtml) {
+      target.innerHTML = target.dataset.idleHtml;
+      delete target.dataset.idleHtml;
+    }
+    control.disabled = false;
+    control.removeAttribute("aria-busy");
+    control.classList?.remove("is-loading");
+  }
+}
+
+async function runOnce(key, control, busyText, task) {
+  if (state.pendingActions.has(key)) return null;
+  state.pendingActions.add(key);
+  setControlBusy(control, true, busyText);
+  try {
+    return await task();
+  } finally {
+    state.pendingActions.delete(key);
+    setControlBusy(control, false);
+  }
+}
+
+function isInteractiveCategoryClick(event) {
+  return Boolean(event.target.closest("button,a,input,select,textarea,label,[data-stop-row-click]"));
 }
 
 
@@ -1827,17 +2017,20 @@ async function adminApi(action, payload = {}) {
   return data;
 }
 
-async function toggleStock(id) {
+async function toggleStock(id, button = null) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
-  try {
-    const result = await adminApi("toggleStock", { itemId: id, is_stoplisted: !item.is_stoplisted });
-    upsertLocalItem(result.item);
-    toast(result.item.is_stoplisted ? "Блюдо добавлено в стоп-лист" : "Блюдо возвращено в продажу", "success");
-    renderAll();
-  } catch (error) {
-    toast(toFriendlyError(error.message) || "Не удалось изменить стоп-лист", "danger");
-  }
+  await runOnce(`toggle-stock:${id}`, button, item.is_stoplisted ? "Возвращаем..." : "Ставим...", async () => {
+    try {
+      const result = await adminApi("toggleStock", { itemId: id, is_stoplisted: !item.is_stoplisted });
+      upsertLocalItem(result.item);
+      toast(result.item.is_stoplisted ? "Блюдо добавлено в стоп-лист" : "Блюдо возвращено в продажу", "success");
+      renderAll();
+      if (el.categoryDetailDialog?.open) renderCategoryDetail(result.item.category_id || item.category_id);
+    } catch (error) {
+      toast(toFriendlyError(error.message) || "Не удалось изменить стоп-лист", "danger");
+    }
+  });
 }
 
 function handleDeleteItem() {
@@ -1960,8 +2153,14 @@ function bindEvents() {
   el.uploadZone?.addEventListener("drop", (event) => handleBulkUploads(event.dataTransfer.files));
 
   el.confirmDialog.addEventListener("close", () => {
-    if (el.confirmDialog.returnValue === "confirm") state.pendingConfirm?.();
+    if (el.confirmDialog.returnValue !== "confirm") state.pendingConfirm = null;
+  });
+  el.confirmDialog.querySelector("form")?.addEventListener("submit", async (event) => {
+    if (event.submitter?.value !== "confirm") return;
+    event.preventDefault();
+    await runPendingConfirm();
     state.pendingConfirm = null;
+    el.confirmDialog.close("done");
   });
 
   el.categoryForm.addEventListener("submit", handleCategorySubmit);
@@ -1972,6 +2171,15 @@ function bindEvents() {
   });
   el.categorySplitForm?.elements.source_category_id?.addEventListener("change", renderCategorySplitItems);
   document.querySelector("[data-close-category-split]")?.addEventListener("click", () => el.categorySplitDialog?.close());
+  el.categoryDeleteForm?.addEventListener("submit", handleCategoryDeleteSubmit);
+  document.querySelector("[data-close-category-delete]")?.addEventListener("click", () => el.categoryDeleteDialog?.close());
+  document.addEventListener("keydown", (event) => {
+    const row = event.target.closest?.("[data-open-category]");
+    if (!row || !["Enter", " "].includes(event.key)) return;
+    if (isInteractiveCategoryClick(event)) return;
+    event.preventDefault();
+    openCategoryDetail(row.dataset.openCategory);
+  });
 
   document.querySelectorAll("[data-lang-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -2301,62 +2509,72 @@ async function flushPendingAutoTranslateBeforeSave() {
 
 async function handleItemSubmit(event) {
   event.preventDefault();
-
-  await flushPendingAutoTranslateBeforeSave();
-
-  const data = Object.fromEntries(new FormData(el.itemForm));
-  if (!String(data.name_ru || "").trim()) {
-    toast("Укажите название карточки", "danger");
-    el.itemForm.elements.name_ru.focus();
-    return;
-  }
-
-  const categoryId = String(data.category_id || "").trim();
-  if (!categoryId) {
-    toast("Выберите раздел для карточки", "danger");
-    el.itemForm.elements.category_id.focus();
-    return;
-  }
-
-  const existing = state.items.find((entry) => entry.id === data.id);
-  const isHotelBreakfast = isHotelBreakfastSectionKey(categoryId);
-  if (!isHotelBreakfast && !String(data.price || "").trim()) {
-    toast("Укажите цену для карточки", "danger");
-    el.itemForm.elements.price.focus();
-    return;
-  }
-
-  const payload = {
-    id: existing?.id || "",
-    category_id: categoryId,
-    name_ru: data.name_ru.trim(),
-    name_kz: data.name_kz.trim(),
-    name_en: data.name_en.trim(),
-    description_ru: data.description_ru.trim(),
-    description_kz: data.description_kz.trim(),
-    description_en: data.description_en.trim(),
-    price: isHotelBreakfast ? null : Number(data.price || 0),
-    old_price: !isHotelBreakfast && String(data.old_price || "").trim() ? Number(data.old_price) : null,
-    weight: String(data.weight || "").trim(),
-    calories: String(data.calories || "").trim() ? Number(data.calories) : null,
-    spice_level: String(data.spice_level || "").trim(),
-    sort_order: Number(data.sort_order) || 0,
-    is_active: existing ? existing.is_active : true,
-    is_stoplisted: data.is_stoplisted === "true",
-    inactive_until: existing?.inactive_until || null,
-    image_url: el.itemForm.dataset.image || "",
-    imageData: el.itemForm.dataset.pendingImage || "",
-  };
+  if (state.pendingActions.has("save-item")) return;
+  const submitter = event.submitter || el.itemForm.querySelector('button[type="submit"]');
+  state.pendingActions.add("save-item");
+  setControlBusy(submitter, true, "Сохраняем...");
 
   try {
-    const result = await adminApi("saveItem", { item: payload });
-    upsertLocalItem(result.item);
-    state.dirty = false;
-    toast(existing ? "Блюдо обновлено" : "Блюдо добавлено", "success");
-    closeDrawer(true);
-    renderAll();
-  } catch (error) {
-    toast(toFriendlyError(error.message) || "Не удалось сохранить блюдо", "danger");
+    await flushPendingAutoTranslateBeforeSave();
+
+    const data = Object.fromEntries(new FormData(el.itemForm));
+    if (!String(data.name_ru || "").trim()) {
+      toast("Укажите название карточки", "danger");
+      el.itemForm.elements.name_ru.focus();
+      return;
+    }
+
+    const categoryId = String(data.category_id || "").trim();
+    if (!categoryId) {
+      toast("Выберите раздел для карточки", "danger");
+      el.itemForm.elements.category_id.focus();
+      return;
+    }
+
+    const existing = state.items.find((entry) => entry.id === data.id);
+    const isHotelBreakfast = isHotelBreakfastSectionKey(categoryId);
+    if (!isHotelBreakfast && !String(data.price || "").trim()) {
+      toast("Укажите цену для карточки", "danger");
+      el.itemForm.elements.price.focus();
+      return;
+    }
+
+    const payload = {
+      id: existing?.id || "",
+      category_id: categoryId,
+      name_ru: data.name_ru.trim(),
+      name_kz: data.name_kz.trim(),
+      name_en: data.name_en.trim(),
+      description_ru: data.description_ru.trim(),
+      description_kz: data.description_kz.trim(),
+      description_en: data.description_en.trim(),
+      price: isHotelBreakfast ? null : Number(data.price || 0),
+      old_price: !isHotelBreakfast && String(data.old_price || "").trim() ? Number(data.old_price) : null,
+      weight: String(data.weight || "").trim(),
+      calories: String(data.calories || "").trim() ? Number(data.calories) : null,
+      spice_level: String(data.spice_level || "").trim(),
+      sort_order: Number(data.sort_order) || 0,
+      is_active: existing ? existing.is_active : true,
+      is_stoplisted: data.is_stoplisted === "true",
+      inactive_until: existing?.inactive_until || null,
+      image_url: el.itemForm.dataset.image || "",
+      imageData: el.itemForm.dataset.pendingImage || "",
+    };
+
+    try {
+      const result = await adminApi("saveItem", { item: payload });
+      upsertLocalItem(result.item);
+      state.dirty = false;
+      toast(existing ? "Блюдо обновлено" : "Блюдо добавлено", "success");
+      closeDrawer(true);
+      renderAll();
+      if (el.categoryDetailDialog?.open) renderCategoryDetail(result.item.category_id || categoryId);
+    } catch (error) {
+      toast(toFriendlyError(error.message) || "Не удалось сохранить блюдо", "danger");
+    }
+  } finally {
+    state.pendingActions.delete("save-item");
+    setControlBusy(submitter, false);
   }
 }
 

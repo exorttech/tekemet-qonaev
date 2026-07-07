@@ -361,6 +361,21 @@
       </form>
     </dialog>
 
+    <dialog class="confirm-dialog category-detail-dialog" data-category-detail-dialog>
+      <div class="settings-form category-detail-panel" data-category-detail-root></div>
+    </dialog>
+
+    <dialog class="confirm-dialog category-delete-dialog" data-category-delete-dialog>
+      <form class="settings-form category-delete-form" data-category-delete-form novalidate>
+        <input type="hidden" name="category_id" />
+        <p class="kicker">Удаление категории</p>
+        <h2 data-category-delete-title>Удалить категорию</h2>
+        <p class="category-delete-copy" data-category-delete-copy></p>
+        <label data-category-delete-target-field hidden>Куда перенести блюда<select name="target_category_id" data-category-delete-target></select></label>
+        <div><button type="button" class="secondary-button compact" data-close-category-delete>Отмена</button><button type="submit" class="danger-button">Удалить категорию</button></div>
+      </form>
+    </dialog>
+
     <dialog class="confirm-dialog" data-confirm-dialog><form method="dialog"><h2 data-confirm-title>Подтвердите действие</h2><p data-confirm-text></p><div><button value="cancel" class="secondary-button compact">Отмена</button><button value="confirm" class="danger-button">Подтвердить</button></div></form></dialog>
     <div class="toast-stack" data-toast-stack aria-live="polite"></div>
   </body>
