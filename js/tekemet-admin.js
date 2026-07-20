@@ -81,6 +81,9 @@ const viewMeta = {
   categories: ["Категории", "Структура меню"],
   stoplist: ["Стоп-лист", "Быстрая доступность"],
   analytics: ["Аналитика", "Поведение гостей и эффективность меню"],
+  qr: ["QR-коды", "Меню и Wi-Fi для гостей"],
+  settings: ["Настройки", "Конфигурация Tekemet"],
+  integrations: ["Интеграции", "Подключённые сервисы"],
 };
 
 
@@ -345,6 +348,46 @@ function navigate(view) {
   history.replaceState(null, "", `#${view}`);
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (view === "analytics") loadAnalytics();
+  if (view === "qr") renderQrWorkspace();
+}
+
+function renderQrWorkspace() {
+  const root = document.querySelector("[data-qr-root]");
+  if (!root || root.dataset.ready) return;
+  root.dataset.ready = "true";
+  const menuUrl = getPublicMenuUrl();
+  root.innerHTML = `
+    <header class="qr-page-header"><div><p class="kicker">Гостевые ссылки</p><h2>QR-коды Tekemet</h2><p>Создавайте готовые к печати коды меню и Wi-Fi. Данные Wi-Fi остаются только в браузере.</p></div></header>
+    <div class="qr-layout">
+      <article class="qr-create-card"><div><p class="kicker">Публичное меню</p><h3>QR меню</h3></div><div class="qr-static-preview" data-menu-qr></div><div class="qr-source-url"><input readonly value="${escapeHtml(menuUrl)}"><button type="button" data-copy-menu-url>Копировать</button></div><button class="secondary-button compact" type="button" data-download-menu-qr>Скачать PNG</button></article>
+      <form class="qr-create-card" data-wifi-form><div><p class="kicker">Wi-Fi для гостей</p><h3>QR подключения</h3></div><label>Название сети<input name="ssid" maxlength="64" required></label><label>Защита<select name="security"><option value="WPA">WPA / WPA2</option><option value="WEP">WEP</option><option value="nopass">Без пароля</option></select></label><label data-wifi-password>Пароль<input name="password" type="password" maxlength="63"></label><label class="wifi-hidden-line"><input name="hidden" type="checkbox"> Скрытая сеть</label><button class="primary-button" type="submit">Создать Wi-Fi QR</button><div class="qr-static-preview" data-wifi-qr></div><button class="secondary-button compact" type="button" data-download-wifi-qr hidden>Скачать PNG</button></form>
+    </div>`;
+  const menuNode = root.querySelector("[data-menu-qr]");
+  if (window.QRCode) new window.QRCode(menuNode, { text: menuUrl, width: 196, height: 196, correctLevel: window.QRCode.CorrectLevel.H });
+  root.addEventListener("change", (event) => {
+    if (event.target.name !== "security") return;
+    const field = root.querySelector("[data-wifi-password]");
+    field.hidden = event.target.value === "nopass";
+    field.querySelector("input").disabled = field.hidden;
+  });
+  root.addEventListener("submit", (event) => {
+    if (!event.target.matches("[data-wifi-form]")) return;
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target));
+    const escapeWifi = (value) => String(value || "").replace(/([\\;,:\"])/g, "\\$1");
+    const payload = `WIFI:T:${data.security};S:${escapeWifi(data.ssid)};${data.security === "nopass" ? "" : `P:${escapeWifi(data.password)};`}H:${data.hidden === "on" ? "true" : "false"};;`;
+    const node = root.querySelector("[data-wifi-qr]");
+    node.innerHTML = "";
+    if (window.QRCode) new window.QRCode(node, { text: payload, width: 196, height: 196, correctLevel: window.QRCode.CorrectLevel.H });
+    root.querySelector("[data-download-wifi-qr]").hidden = false;
+  });
+  root.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-copy-menu-url]")) { await navigator.clipboard.writeText(menuUrl); toast("Ссылка скопирована", "success"); }
+    const selector = event.target.closest("[data-download-menu-qr]") ? "[data-menu-qr]" : event.target.closest("[data-download-wifi-qr]") ? "[data-wifi-qr]" : "";
+    if (!selector) return;
+    const preview = root.querySelector(selector); const canvas = preview.querySelector("canvas"); const image = preview.querySelector("img"); const url = canvas?.toDataURL("image/png") || image?.src;
+    if (url) { const link = document.createElement("a"); link.href = url; link.download = selector.includes("wifi") ? "tekemet-wifi.png" : "tekemet-menu.png"; link.click(); }
+  });
 }
 
 function getRequestedViewFromHash() {
@@ -469,9 +512,9 @@ function renderAnalytics() {
       <div class="analytics-range" role="group" aria-label="Период аналитики">
         ${[
           ["today", "Сегодня"],
-          ["7d", "Неделя"],
-          ["30d", "Месяц"],
-          ["year", "Год"],
+          ["7d", "7 дней"],
+          ["30d", "30 дней"],
+          ["all", "Всё время"],
         ].map(([value, label]) => `<button class="${range === value ? "is-active" : ""}" type="button" data-analytics-range="${value}">${label}</button>`).join("")}
       </div>
     </div>

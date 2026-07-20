@@ -1,6 +1,6 @@
 (function initExortAdminApiConfig() {
   const PROD_ENDPOINT = "/.netlify/functions/tekemet-admin";
-  const STORAGE_KEY = "exort.admin.apiUrl";
+  const STORAGE_KEY = "tekemet.admin.apiUrl";
   const META_SELECTOR = 'meta[name="exort-admin-api"]';
   const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -27,10 +27,10 @@
   function getEndpointError(endpoint) {
     if (!isLocalhost()) return "";
     if (!endpoint) {
-      return "Для локального входа через Live Server укажите полный URL Cloudflare Worker в window.EXORT_ADMIN_API_URL или localStorage key exort.admin.apiUrl.";
+      return "Для локального входа через Live Server укажите полный URL Netlify Function в window.TEKEMET_ADMIN_API или localStorage key tekemet.admin.apiUrl.";
     }
     if (!/^https?:\/\//i.test(endpoint)) {
-      return "На локальном сервере API должен быть указан полным URL Cloudflare Worker. Относительный путь для Live Server не подходит.";
+      return "На локальном сервере API должен быть указан полным URL Netlify Function. Относительный путь для Live Server не подходит.";
     }
     return "";
   }
@@ -66,7 +66,7 @@
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.error) {
-        throw new Error(data.error || "Ошибка запроса Exort Admin");
+        throw new Error(data.error || "Ошибка запроса Tekemet Admin");
       }
       return data;
     },

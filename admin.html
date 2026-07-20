@@ -16,11 +16,12 @@
     <title>Exort Панель | Tekemet Qonaev</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/tekemet-admin.css?v=13" />
     <link rel="stylesheet" href="css/tekemet-admin-navigation.css?v=1" />
     <script defer src="js/tekemet-admin-api.js?v=2"></script>
-    <script defer src="js/tekemet-admin.js?v=11"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script defer src="js/tekemet-admin.js?v=14"></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -30,6 +31,7 @@
       <symbol id="icon-stop" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m6.4 6.4 11.2 11.2"/></symbol>
       <symbol id="icon-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4.5-4.5L6 20"/></symbol>
       <symbol id="icon-analytics" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-7"/><path d="M20 16v-3"/></symbol>
+      <symbol id="icon-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14h1"/></symbol>
       <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></symbol>
       <symbol id="icon-support" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H9l-5 3v-7a9 9 0 1 1 17 0Z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></symbol>
       <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 8l4 4-4 4M18 12H9"/></symbol>
@@ -76,6 +78,10 @@
           <button type="button" data-nav="categories"><svg><use href="#icon-categories"/></svg><span>Категории</span></button>
           <button type="button" data-nav="stoplist"><svg><use href="#icon-stop"/></svg><span>Стоп-лист</span></button>
           <button type="button" data-nav="analytics"><svg><use href="#icon-analytics"/></svg><span>Аналитика</span></button>
+          <button type="button" data-nav="qr"><svg><use href="#icon-qr"/></svg><span>QR-коды</span></button>
+          <p>Система</p>
+          <button type="button" data-nav="settings"><svg><use href="#icon-categories"/></svg><span>Настройки</span></button>
+          <button type="button" data-nav="integrations"><svg><use href="#icon-external"/></svg><span>Интеграции</span></button>
         </nav>
         <div class="side-footer">
           <a data-menu-link href="/menu" target="_blank" rel="noreferrer"><svg><use href="#icon-external"/></svg><span>Открыть меню</span></a>
@@ -121,8 +127,10 @@
             <select data-category-filter aria-label="Фильтр категорий"></select>
             <select data-status-filter aria-label="Фильтр статуса">
               <option value="all">Все статусы</option>
-              <option value="active">Актуальные</option>
-              <option value="stop">На стопе</option>
+              <option value="active">В продаже</option>
+              <option value="stop">Стоп-лист</option>
+              <option value="temporary">Временно недоступные</option>
+              <option value="inactive">Неактивные</option>
             </select>
             <button class="primary-button compact" type="button" data-action="add-item">Добавить блюдо</button>
           </div>
@@ -230,6 +238,34 @@
             </div>
           </div>
         </section>
+
+        <section class="view" data-view="qr">
+          <div class="qr-page" data-qr-root></div>
+        </section>
+
+        <section class="view" data-view="settings">
+          <div class="system-state-grid">
+            <article class="system-state-card">
+              <p class="kicker">Текущее заведение</p>
+              <h2 data-restaurant-name>Tekemet Qonaev</h2>
+              <p>Гостиничный режим, завтраки и специальные настройки Tekemet сохранены. Публичное меню и контент работают через Supabase.</p>
+              <a class="secondary-button compact" data-menu-link href="/menu" target="_blank" rel="noreferrer">Открыть публичное меню</a>
+            </article>
+            <article class="system-state-card">
+              <span>Инфраструктура</span>
+              <h2>Netlify + Supabase</h2>
+              <p>Административные операции выполняются Netlify Function. Изменение Cloudflare-конфигурации не требуется.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view="integrations">
+          <div class="system-state-grid">
+            <article class="system-state-card"><span class="is-connected">Подключено</span><h2>Supabase</h2><p>Контент, авторизация панели, изображения и реальная аналитика меню.</p></article>
+            <article class="system-state-card"><span class="is-connected">Подключено</span><h2>Netlify Functions</h2><p>Безопасный серверный слой Tekemet для административных операций и переводов.</p></article>
+            <article class="system-state-card is-disabled"><span>Не подключено</span><h2>r_keeper / iiko</h2><p>Интеграция не имитируется: для подключения потребуется отдельное backend-решение и доступы поставщика.</p></article>
+          </div>
+        </section>
       </main>
 
       <nav class="mobile-nav" aria-label="Мобильная навигация">
@@ -237,7 +273,7 @@
         <button type="button" data-nav="menu" aria-label="Меню"><svg><use href="#icon-menu"/></svg><span>Меню</span></button>
         <button type="button" data-nav="stoplist" aria-label="Стоп-лист"><svg><use href="#icon-stop"/></svg><span>Стоп</span></button>
         <button type="button" data-nav="analytics" aria-label="Аналитика"><svg><use href="#icon-analytics"/></svg><span>Аналитика</span></button>
-        <button type="button" data-nav="categories" aria-label="Категории"><svg><use href="#icon-categories"/></svg><span>Категории</span></button>
+        <button type="button" data-nav="qr" aria-label="QR-коды"><svg><use href="#icon-qr"/></svg><span>QR</span></button>
       </nav>
     </div>
 
