@@ -69,6 +69,7 @@
 }
 .demo-admin-live .login-brand { font-size: 22px; }
 .demo-admin-live .login-brand { display:block; width:fit-content; }
+.demo-admin-live .login-brand img { display:block; width:152px; max-width:100%; height:auto; }
 .demo-admin-live .login-brand span { background: var(--text); }
 .demo-admin-live .login-brand strong { position:relative; width:fit-content; font-family:"Unbounded","Manrope",sans-serif; font-size:22px; font-weight:700; letter-spacing:-.04em; }
 .demo-admin-live .login-brand strong i { position:absolute; top:-2px; right:-9px; width:7px; height:7px; background:var(--accent-coral); border-radius:50%; }
@@ -96,6 +97,7 @@
 }
 .demo-admin-live .sidebar::before { display: none; }
 .demo-admin-live .sidebar-product { grid-template-columns:1fr; grid-template-rows:21px 17px; row-gap:2px; padding:0 9px 20px; color:var(--text); }
+.demo-admin-live .sidebar-product > img { display:block; width:98px; max-width:100%; height:auto; align-self:end; }
 .demo-admin-live .sidebar-product .exort-mark {
   width: 40px;
   height: 40px;
@@ -1348,6 +1350,7 @@ body.demo-admin-live:has(dialog[open]) { overflow:hidden; }
 @media(min-width:821px) and (max-width:1024px) {
   .demo-admin-live .sidebar { width:88px; padding-inline:10px; overflow-x:hidden; overflow-y:auto; }
   .demo-admin-live .sidebar-product { justify-items:center; padding-inline:0; text-align:center; }
+  .demo-admin-live .sidebar-product > img { width:64px; }
   .demo-admin-live .sidebar-product strong { font-size:12px; white-space:nowrap; }
   .demo-admin-live .sidebar-product small,
   .demo-admin-live .sidebar-restaurant > div:last-child,
