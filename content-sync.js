@@ -9,9 +9,7 @@
     const DEFAULT_ADMIN_FUNCTION_URL = 'https://tekemetqonaev.com/.netlify/functions/tekemet-admin';
 
     function getAdminFunctionUrl() {
-        const configured = window.EXORT_ADMIN_API_URL
-            || window.TEKEMET_ADMIN_API_URL
-            || localStorage.getItem('exort.admin.apiUrl')
+        const configured = window.TEKEMET_ADMIN_API_URL
             || localStorage.getItem('tekemet.admin.apiUrl')
             || '';
         if (configured) {
@@ -404,9 +402,8 @@
                     .lte('inactive_until', new Date().toISOString())
                     .eq('is_active', false);
             }
-        } catch (err) {
+        } catch {
             // ignore failures (column may not exist)
-            console.debug('[content-sync] auto-activate skipped:', err && err.message);
         }
 
         try {
@@ -498,7 +495,6 @@
         if (savedImageUrl) {
             try {
                 const url = String(savedImageUrl || '');
-                console.info('[content-sync] Applying menu hero image:', url);
                 menuHero.style.setProperty('background-image', 'url("' + url + '")', 'important');
                 menuHero.style.setProperty('background-size', 'cover', 'important');
                 menuHero.style.setProperty('background-position', 'center', 'important');
@@ -591,6 +587,7 @@
             os: getOsName(),
             qrCode: getUrlParam('qr') || getUrlParam('table'),
             source: getUrlParam('source') || getUrlParam('utm_source'),
+            sourcePublicId: getUrlParam('source') || getUrlParam('source_id') || getUrlParam('qr_id'),
             userAgent: navigator.userAgent || '',
             referrer: document.referrer || '',
             ...payload

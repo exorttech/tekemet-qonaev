@@ -165,9 +165,7 @@ function getDeviceTypeFallback() {
 
 function getAdminFunctionUrlFallback() {
     try {
-        const configured = window.EXORT_ADMIN_API_URL
-            || window.TEKEMET_ADMIN_API_URL
-            || localStorage.getItem('exort.admin.apiUrl')
+        const configured = window.TEKEMET_ADMIN_API_URL
             || localStorage.getItem('tekemet.admin.apiUrl')
             || '';
         if (configured) return configured;
@@ -200,6 +198,10 @@ function trackDishEventFallback(eventType, item, durationMs) {
         userAgent: navigator.userAgent || '',
         referrer: document.referrer || '',
         durationMs: Number(durationMs || 0),
+        sourcePublicId: new URLSearchParams(window.location.search).get('source')
+            || new URLSearchParams(window.location.search).get('source_id')
+            || new URLSearchParams(window.location.search).get('qr_id')
+            || '',
     });
     const url = getAdminFunctionUrlFallback();
 

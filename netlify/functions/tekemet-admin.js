@@ -1,10 +1,12 @@
 const { webcrypto } = require("crypto");
+const { getAnalyticsV2 } = require("./tekemet-analytics");
 const webCrypto = globalThis.crypto || webcrypto;
 const btoa = globalThis.btoa || ((value) => Buffer.from(value, "binary").toString("base64"));
 const atob = globalThis.atob || ((value) => Buffer.from(value, "base64").toString("binary"));
 
 const BUCKET = "site-assets";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const ADMIN_NOT_CONFIGURED = "Tekemet admin backend is not configured";
 const DEFAULT_RESTAURANT_SLUG = "tekemet-qonaev";
 const DEFAULT_RESTAURANT_TIME_ZONE = "Asia/Almaty";
 const DEFAULT_SECTION_ORDER = ["hotel-breakfasts", "breakfast", "salads", "appetizers", "mains", "sides", "drinks"];
@@ -64,7 +66,7 @@ async function handleRequest(request, env) {
       return jsonResponse(200, {
         ok: !configError,
         configured: !configError,
-        service: "exort-admin",
+        service: "tekemet-admin",
         error: configError || "",
       });
     }
@@ -103,11 +105,14 @@ async function handleRequest(request, env) {
       if (action === "saveCategory") return await saveCategory(env, restaurantSlug, body.category);
       if (action === "splitCategory") return await splitCategory(env, restaurantSlug, body.split || body);
       if (action === "sortCategories") return await sortCategories(env, restaurantSlug, body.categories || []);
-      if (action === "getAnalytics") return await getAnalytics(env, restaurantSlug, body.range || "today");
-      if (action === "deleteCategory") return await deleteCategory(env, restaurantSlug, body.categoryId, body.targetCategoryId);
+      if (action === "getAnalytics") return await getAnalyticsV2(env, restaurantSlug, body);
+      if (action === "getQrSources") return await getQrSources(env, restaurantSlug);
+      if (action === "createQrSource") return await createQrSource(env, restaurantSlug, body);
+      if (action === "deleteQrSource") return await deleteQrSource(env, restaurantSlug, body.sourceId);
+      if (action === "deleteCategory") return await deleteCategory(env, restaurantSlug, body.categoryId, body.mode, body.targetCategoryId);
       if (action === "sortItems") return await sortItems(env, restaurantSlug, body.items || []);
 
-      return jsonResponse(400, { error: "Unknown Exort admin action." });
+      return jsonResponse(400, { error: "Unknown Tekemet admin action." });
     } catch (error) {
       console.error("[tekemet-admin-function]", error);
       return jsonResponse(500, { error: error?.message || "Unexpected admin backend error." });
@@ -149,11 +154,11 @@ async function getPublicContent(env, contentType) {
 }
 
 async function buildAdminData(env, slug) {
-  const contentItems = await getMenuContentItems(env);
+  const [contentItems, categoryMeta] = await Promise.all([getMenuContentItems(env), getMenuCategoryMeta(env)]);
   const archivedSections = getArchivedCategoryKeys(contentItems);
   const menuHero = contentItems.find(isMenuHeroContentItem) || null;
   const dishItems = contentItems.filter((item) => !isMenuHeroContentItem(item) && !isCategoryArchiveContentItem(item));
-  const categories = buildContentCategories(dishItems, archivedSections);
+  const categories = mergeCategoryMeta(buildContentCategories(dishItems, archivedSections), categoryMeta, archivedSections);
   const items = dishItems.map(mapContentItemToAdminItem);
 
   return {
@@ -306,28 +311,42 @@ async function uploadMenuHeroPhoto(env, slug, imageData) {
 }
 
 async function saveCategory(env, slug, category) {
-  if (!category || !String(category.name_ru || category.name || "").trim()) {
-    throw new Error("RU category name is required.");
+  if (!category || !String(category.name_ru || category.name || "").trim() || !clean(category.name_kz) || !clean(category.name_en)) {
+    throw new Error("Названия категории на русском, казахском и английском обязательны.");
   }
 
   const normalizedCategory = normalizeVirtualCategory(category);
   await unarchiveCategoryKey(env, normalizedCategory.section_key);
+  await upsertMenuCategoryMeta(env, normalizedCategory);
   return jsonResponse(200, { category: normalizedCategory });
 }
 
-async function deleteCategory(env, slug, categoryId, targetCategoryId = "") {
+async function deleteCategory(env, slug, categoryId, mode = "", targetCategoryId = "") {
   const sectionKey = sanitizeSectionKey(categoryId);
   const targetKey = clean(targetCategoryId) ? sanitizeSectionKey(targetCategoryId) : "";
   const allItems = (await getMenuContentItems(env)).filter((item) => !isMenuHeroContentItem(item) && !isCategoryArchiveContentItem(item));
   const sourceItems = allItems.filter((item) => sanitizeSectionKey(item.section_key || "") === sectionKey);
 
   if (sourceItems.length) {
-    if (!targetKey) throw new Error("Выберите раздел для переноса блюд.");
-    if (targetKey === sectionKey) throw new Error("Выберите другой раздел для переноса блюд.");
-    await moveCategoryItems(env, sourceItems, targetKey);
+    if (mode === "move") {
+      if (!targetKey) throw new Error("Выберите раздел для переноса блюд.");
+      if (targetKey === sectionKey) throw new Error("Выберите другой раздел для переноса блюд.");
+      await moveCategoryItems(env, sourceItems, targetKey);
+    } else if (mode === "cascade") {
+      for (const item of sourceItems) {
+        await supabaseRest(env, "content_items", {
+          method: "DELETE",
+          query: { id: `eq.${item.id}`, content_type: "eq.menu" },
+          prefer: "return=minimal",
+        });
+      }
+    } else {
+      throw new Error("Выберите безопасный способ удаления блюд.");
+    }
   }
 
   await archiveCategoryKey(env, sectionKey);
+  await deleteMenuCategoryMeta(env, sectionKey);
   return getData(env, slug);
 }
 
@@ -345,11 +364,20 @@ async function sortItems(env, slug, items) {
 }
 
 async function sortCategories(env, slug, categories) {
+  const current = await buildAdminData(env, slug);
+  for (const entry of categories || []) {
+    const existing = current.categories.find((category) => category.id === sanitizeSectionKey(entry.id));
+    if (!existing) continue;
+    await upsertMenuCategoryMeta(env, normalizeVirtualCategory({
+      ...existing,
+      sort_order: Number(entry.sort_order || existing.sort_order || existing.sort || 0),
+    }));
+  }
   return getData(env, slug);
 }
 
 async function splitCategory(env, slug, split) {
-  const rawSourceKey = clean(split?.sourceCategoryId || split?.sourceSectionKey || split?.source_key || "");
+  const rawSourceKey = clean(split?.categoryId || split?.sourceCategoryId || split?.sourceSectionKey || split?.source_key || "");
   if (!rawSourceKey) throw new Error("Выберите исходный раздел.");
   const sourceKey = sanitizeSectionKey(rawSourceKey);
 
@@ -359,29 +387,30 @@ async function splitCategory(env, slug, split) {
     throw new Error("В исходном разделе нет блюд для переноса.");
   }
 
+  const category = split?.category || {};
+  const nameRu = clean(category.name_ru);
+  const nameKz = clean(category.name_kz);
+  const nameEn = clean(category.name_en);
+  if (!nameRu || !nameKz || !nameEn) throw new Error("Заполните название нового раздела на всех трёх языках.");
+
+  const selectedIds = [...new Set((split?.itemIds || split?.item_ids || []).map((value) => String(value)))];
+  const sourceIds = new Set(sourceItems.map((item) => String(item.id)));
+  if (!selectedIds.length || selectedIds.some((id) => !sourceIds.has(id))) throw new Error("Выберите блюда из исходного раздела.");
+  if (selectedIds.length >= sourceItems.length) throw new Error("Исходный раздел должен остаться непустым.");
+
   const usedKeys = new Set(allItems.map((item) => sanitizeSectionKey(item.section_key || "")).filter(Boolean));
-  const targets = normalizeSplitTargets(split?.targets || split?.newCategories || [], usedKeys, sourceKey);
-  if (targets.length !== 2) {
-    throw new Error("Создайте два новых раздела.");
-  }
+  const targetKey = makeUniqueSectionKey(nameRu, usedKeys, sourceKey);
+  await unarchiveCategoryKey(env, targetKey);
+  await upsertMenuCategoryMeta(env, normalizeVirtualCategory({
+    id: targetKey,
+    name_ru: nameRu,
+    name_kz: nameKz,
+    name_en: nameEn,
+    sort_order: Math.max(...(await buildAdminData(env, slug)).categories.map((entry) => Number(entry.sort_order || entry.sort || 0)), 0) + 10,
+    is_active: true,
+  }));
 
-  const assignments = normalizeSplitAssignments(split?.assignments || split?.itemAssignments || []);
-  const targetByClientId = new Map(targets.map((target) => [target.clientId, target]));
-  const sourceIds = sourceItems.map((item) => String(item.id));
-  const missingIds = sourceIds.filter((id) => !assignments.has(id) || !targetByClientId.has(assignments.get(id)));
-  if (missingIds.length) {
-    throw new Error("Распределите все блюда по новым разделам.");
-  }
-
-  const targetCounts = targets.reduce((acc, target) => ({ ...acc, [target.clientId]: 0 }), {});
-  for (const itemId of sourceIds) {
-    targetCounts[assignments.get(itemId)] += 1;
-  }
-  if (Object.values(targetCounts).some((count) => count === 0)) {
-    throw new Error("В каждом новом разделе должно быть хотя бы одно блюдо.");
-  }
-
-  const originals = sourceItems.map((item) => ({
+  const originals = sourceItems.filter((item) => selectedIds.includes(String(item.id))).map((item) => ({
     id: item.id,
     section_key: item.section_key || sourceKey,
     sort_order: Number(item.sort_order || 0),
@@ -390,11 +419,10 @@ async function splitCategory(env, slug, split) {
 
   try {
     for (const original of originals) {
-      const target = targetByClientId.get(assignments.get(String(original.id)));
       await supabaseRest(env, "content_items", {
         method: "PATCH",
         query: { id: `eq.${original.id}`, content_type: "eq.menu" },
-        body: { section_key: target.section_key },
+        body: { section_key: targetKey },
         prefer: "return=minimal",
       });
       moved.push(original);
@@ -403,8 +431,7 @@ async function splitCategory(env, slug, split) {
     const verifyRows = await getMenuContentItems(env);
     const verifyMap = new Map(verifyRows.map((item) => [String(item.id), sanitizeSectionKey(item.section_key || "")]));
     const failed = originals.some((original) => {
-      const target = targetByClientId.get(assignments.get(String(original.id)));
-      return verifyMap.get(String(original.id)) !== target.section_key;
+      return verifyMap.get(String(original.id)) !== targetKey;
     });
     if (failed) throw new Error("Не удалось проверить перенос блюд.");
 
@@ -549,6 +576,11 @@ async function trackAnalyticsEvent(env, slug, body) {
   try {
     const eventType = normalizeEventType(body.eventType);
     if (!eventType) return jsonResponse(200, { ok: true, tracked: false });
+    const restaurantId = await getRestaurantId(env, slug);
+    const sourcePublicId = cleanLimited(body.sourcePublicId || body.sourceId || body.source_id || body.qrId || body.qr_id || body.source || body.qrCode, 64);
+    const qrSource = restaurantId && sourcePublicId
+      ? await resolveQrSource(env, restaurantId, sourcePublicId).catch(() => null)
+      : null;
 
     const rawMenuItemId = body.menuItemId || body.itemId || body.dishId || "";
     const menuItemId = ["dish_open", "dish_close", "dish_photo_open"].includes(eventType)
@@ -567,7 +599,15 @@ async function trackAnalyticsEvent(env, slug, body) {
       sessionId: cleanLimited(body.sessionId, 120) || "",
       referrer: cleanLimited(body.referrer, 500) || "",
       userAgent: cleanLimited(body.userAgent, 500) || "",
-      durationMs: cleanLimited(body.durationMs, 40) || "",
+      durationMs: normalizeAnalyticsDuration(body.durationMs),
+      qrSourceId: qrSource?.id || null,
+      sourceFallback: qrSource?.name || "direct",
+      metadata: {
+        browser: cleanLimited(body.browser, 80) || "",
+        os: cleanLimited(body.os, 80) || "",
+        visitorId: cleanLimited(body.visitorId, 120) || "",
+        pagePath: cleanLimited(body.pagePath || body.menuPageId, 180) || "",
+      },
     });
 
     return jsonResponse(200, { ok: true, tracked });
@@ -577,88 +617,7 @@ async function trackAnalyticsEvent(env, slug, body) {
   }
 }
 
-async function getAnalytics(env, slug, range = "today") {
-  const timeZone = DEFAULT_RESTAURANT_TIME_ZONE;
-  const normalizedRange = normalizeAnalyticsRange(range);
-  const now = new Date();
-  const todayKey = formatDateKeyInTimeZone(now, timeZone);
-  const yesterdayKey = shiftDateKey(todayKey, -1);
-  const last7StartKey = shiftDateKey(todayKey, -6);
-  const last30StartKey = shiftDateKey(todayKey, -29);
-  const yearStartKey = `${todayKey.slice(0, 4)}-01-01`;
-  const selectedStartKey = getRangeStartKey(normalizedRange, todayKey, last7StartKey, last30StartKey, yearStartKey);
-  const queryStartKey = normalizedRange === "year" ? yearStartKey : shiftDateKey(last30StartKey, -1);
-  const queryStart = dateKeyToUtcDate(queryStartKey);
-  const rawEvents = await getAnalyticsEvents(env, slug, normalizedRange === "all" ? null : queryStart);
-  const events = rawEvents.map((event) => withAnalyticsLocalTime(event, timeZone));
-  const selectedEvents = selectedStartKey
-    ? events.filter((event) => isEventOnOrAfterLocalDate(event, selectedStartKey))
-    : events;
-  const selectedDishOpens = selectedEvents.filter((event) => event.event_type === "dish_open");
-  const todayDishOpens = events.filter((event) => (
-    event.event_type === "dish_open" &&
-    event.localDateKey === todayKey
-  ));
-  const dishCounts = countBy(selectedDishOpens.filter((event) => event.menu_item_id), "menu_item_id");
-  const todayDishCounts = countBy(todayDishOpens.filter((event) => event.menu_item_id), "menu_item_id");
-  const recentDishIds = selectedEvents
-    .filter((event) => ["dish_open", "dish_photo_open"].includes(event.event_type))
-    .map((event) => event.menu_item_id || event.content_key)
-    .filter(Boolean);
-  const dishIds = Array.from(new Set([...Object.keys(dishCounts), ...Object.keys(todayDishCounts), ...recentDishIds]));
-  const dishNames = await getContentDishNames(env, dishIds);
 
-  return jsonResponse(200, {
-    ok: true,
-    analytics: {
-      menuVisits: {
-        today: countEventsByLocalDateRange(events, "menu_open", todayKey, shiftDateKey(todayKey, 1)),
-        yesterday: countEventsByLocalDateRange(events, "menu_open", yesterdayKey, todayKey),
-        last7Days: countEventsByLocalDateRange(events, "menu_open", last7StartKey, shiftDateKey(todayKey, 1)),
-        last30Days: countEventsByLocalDateRange(events, "menu_open", last30StartKey, shiftDateKey(todayKey, 1)),
-        year: countEventsByLocalDateRange(events, "menu_open", yearStartKey, shiftDateKey(todayKey, 1)),
-        allTime: events.filter((event) => event.event_type === "menu_open").length,
-      },
-      uniqueGuests: {
-        today: countUniqueSessionsByLocalDateRange(events, todayKey, shiftDateKey(todayKey, 1)),
-        last7Days: countUniqueSessionsByLocalDateRange(events, last7StartKey, shiftDateKey(todayKey, 1)),
-        last30Days: countUniqueSessionsByLocalDateRange(events, last30StartKey, shiftDateKey(todayKey, 1)),
-        year: countUniqueSessionsByLocalDateRange(events, yearStartKey, shiftDateKey(todayKey, 1)),
-        allTime: countUniqueSessionsByLocalDateRange(events, null, null),
-      },
-      dishOpens: {
-        today: countEventsByLocalDateRange(events, "dish_open", todayKey, shiftDateKey(todayKey, 1)),
-        last7Days: countEventsByLocalDateRange(events, "dish_open", last7StartKey, shiftDateKey(todayKey, 1)),
-        last30Days: countEventsByLocalDateRange(events, "dish_open", last30StartKey, shiftDateKey(todayKey, 1)),
-        year: countEventsByLocalDateRange(events, "dish_open", yearStartKey, shiftDateKey(todayKey, 1)),
-        allTime: events.filter((event) => event.event_type === "dish_open").length,
-      },
-      averageViewTime: formatAverageViewTime(calculateAverageDishViewTime(selectedEvents)),
-      popularDishes: dishIds
-        .map((id) => ({ id, title: dishNames[id] || getAnalyticsDishFallbackTitle(id), opens: dishCounts[id] }))
-        .sort((a, b) => b.opens - a.opens)
-        .slice(0, 10),
-      popularDishesToday: Object.keys(todayDishCounts)
-        .map((id) => ({ id, title: dishNames[id] || getAnalyticsDishFallbackTitle(id), opens: todayDishCounts[id] }))
-        .sort((a, b) => b.opens - a.opens)
-        .slice(0, 5),
-      visitsByHour: buildVisitsByHour(events.filter((event) => (
-        event.event_type === "menu_open" &&
-        event.localDateKey === todayKey
-      )), timeZone),
-      visitsByDay: buildVisitsByDay(events, last7StartKey, todayKey, timeZone),
-      visitsByWeek: buildVisitsByWeek(events, last30StartKey, todayKey, timeZone),
-      visitsByMonth: buildVisitsByMonth(events, Number(todayKey.slice(0, 4)), timeZone),
-      dayDetails: buildDayDetails(events, last30StartKey, todayKey, timeZone),
-      allTimeSummary: buildAllTimeSummary(events, timeZone),
-      languages: buildPercentRows(selectedEvents, "language", "language", (value) => String(value || "").toUpperCase()),
-      devices: buildPercentRows(selectedEvents, "device_type", "device"),
-      recentEvents: buildRecentEvents(selectRecentEventsForDisplay(selectedEvents), dishNames, timeZone),
-      timeZone,
-      range: normalizedRange,
-    },
-  });
-}
 async function getMenuContentItems(env) {
   return supabaseRest(env, "content_items", {
     query: {
@@ -683,6 +642,246 @@ async function getContentItem(env, id) {
   return rows[0];
 }
 
+async function getQrSources(env, slug) {
+  const restaurantId = await requireRestaurantId(env, slug);
+  const [sources, events] = await Promise.all([
+    supabaseRest(env, "qr_sources", {
+      query: { select: "*", restaurant_id: `eq.${restaurantId}`, order: "created_at.desc" },
+    }),
+    fetchQrAnalyticsEvents(env, restaurantId),
+  ]);
+
+  const stats = new Map();
+  events.forEach((event) => {
+    if (!event.qr_source_id) return;
+    const current = stats.get(event.qr_source_id) || { sessions: new Set(), engaged: new Set(), lastVisitAt: "" };
+    if (["session_start", "menu_open"].includes(event.event_type) && event.session_id) current.sessions.add(event.session_id);
+    if (event.event_type === "dish_open" && event.session_id) current.engaged.add(event.session_id);
+    if (!current.lastVisitAt || event.created_at > current.lastVisitAt) current.lastVisitAt = event.created_at;
+    stats.set(event.qr_source_id, current);
+  });
+
+  const directEvents = events.filter(isDirectAnalyticsEvent);
+  const directSessions = new Set(directEvents
+    .filter((event) => ["session_start", "menu_open"].includes(event.event_type) && event.session_id)
+    .map((event) => event.session_id));
+  const directLastVisit = directEvents
+    .filter((event) => event.event_type === "menu_open")
+    .reduce((latest, event) => !latest || event.created_at > latest ? event.created_at : latest, "");
+  const directSource = {
+    id: "direct",
+    source_key: "direct",
+    source_type: "direct",
+    name: "Прямой вход",
+    is_active: true,
+    is_system: true,
+    visits: directSessions.size,
+    uniqueGuests: directSessions.size,
+    engagedSessions: new Set(directEvents.filter((event) => event.event_type === "dish_open" && event.session_id).map((event) => event.session_id)).size,
+    lastVisitAt: directLastVisit || null,
+    url: "",
+  };
+
+  return jsonResponse(200, {
+    sources: [directSource, ...sources.filter((source) => source.source_type !== "direct").map((source) => {
+      const sourceStats = stats.get(source.id);
+      return {
+        ...source,
+        visits: sourceStats?.sessions.size || 0,
+        uniqueGuests: sourceStats?.sessions.size || 0,
+        engagedSessions: sourceStats?.engaged.size || 0,
+        lastVisitAt: sourceStats?.lastVisitAt || null,
+        url: buildPublicMenuUrl(slug, source.public_id, source.menu_path),
+      };
+    })],
+  });
+}
+
+async function fetchQrAnalyticsEvents(env, restaurantId) {
+  const rows = [];
+  for (let offset = 0; offset < 20000; offset += 1000) {
+    const page = await supabaseRest(env, "menu_analytics_events", {
+      query: {
+        select: "id,qr_source_id,source_fallback,event_type,session_id,created_at",
+        restaurant_id: `eq.${restaurantId}`,
+        order: "created_at.asc",
+        limit: "1000",
+        offset: String(offset),
+      },
+    });
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return rows;
+}
+
+function isDirectAnalyticsEvent(event) {
+  if (event.qr_source_id) return false;
+  const fallback = clean(event.source_fallback).toLowerCase();
+  return !fallback || ["direct", "прямой вход", "прямой переход"].includes(fallback);
+}
+
+async function createQrSource(env, slug, body) {
+  const restaurantId = await requireRestaurantId(env, slug);
+  const name = cleanLimited(body.name, 100);
+  if (!name) throw new Error("Укажите название источника.");
+  const menuPath = normalizeQrMenuPath(body.menuPath);
+  const rows = await supabaseRest(env, "qr_sources", {
+    method: "POST",
+    query: { select: "*" },
+    body: [{
+      restaurant_id: restaurantId,
+      name,
+      public_id: createPublicSourceId(),
+      source_type: normalizeQrSourceType(body.sourceType),
+      menu_path: menuPath,
+      is_active: true,
+    }],
+    prefer: "return=representation",
+  });
+  const source = rows[0];
+  return jsonResponse(200, { source: { ...source, visits: 0, uniqueGuests: 0, engagedSessions: 0, lastVisitAt: null, url: buildPublicMenuUrl(slug, source.public_id, menuPath) } });
+}
+
+async function deleteQrSource(env, slug, sourceId) {
+  if (!isUuid(sourceId)) throw new Error("Некорректный идентификатор QR-источника.");
+  const restaurantId = await requireRestaurantId(env, slug);
+  const rows = await supabaseRest(env, "qr_sources", {
+    query: { select: "id", id: `eq.${sourceId}`, restaurant_id: `eq.${restaurantId}`, limit: "1" },
+  });
+  if (!rows[0]) throw new Error("QR-источник не найден.");
+
+  await supabaseRest(env, "qr_sources", {
+    method: "PATCH",
+    query: { id: `eq.${sourceId}`, restaurant_id: `eq.${restaurantId}` },
+    body: { is_active: false },
+    prefer: "return=minimal",
+  });
+  await supabaseRest(env, "menu_analytics_events", {
+    method: "DELETE",
+    query: { restaurant_id: `eq.${restaurantId}`, qr_source_id: `eq.${sourceId}` },
+    prefer: "return=minimal",
+  });
+  await supabaseRest(env, "qr_sources", {
+    method: "DELETE",
+    query: { id: `eq.${sourceId}`, restaurant_id: `eq.${restaurantId}` },
+    prefer: "return=minimal",
+  });
+  return jsonResponse(200, { ok: true, sourceId });
+}
+
+async function requireRestaurantId(env, slug) {
+  const restaurantId = await getRestaurantId(env, slug);
+  if (!restaurantId) throw new Error("Ресторан Tekemet не найден. Сначала примените безопасную SQL-миграцию.");
+  return restaurantId;
+}
+
+function createPublicSourceId() {
+  const bytes = webCrypto.getRandomValues(new Uint8Array(12));
+  return encodeBase64Url(bytes);
+}
+
+function normalizeQrSourceType(value) {
+  const type = clean(value).toLowerCase();
+  return ["qr", "link", "social"].includes(type) ? type : "qr";
+}
+
+function normalizeQrMenuPath(value) {
+  const path = cleanLimited(value, 180) || "/menu";
+  return path.startsWith("/") && !path.startsWith("//") ? path : "/menu";
+}
+
+function buildPublicMenuUrl(slug, publicId, menuPath = "/menu") {
+  const path = normalizeQrMenuPath(menuPath);
+  const separator = path.includes("?") ? "&" : "?";
+  return `https://tekemetqonaev.com${path}${separator}source=${encodeURIComponent(publicId)}`;
+}
+
+async function resolveQrSource(env, restaurantId, publicId) {
+  const normalized = cleanLimited(publicId, 64);
+  if (!normalized) return null;
+  const rows = await supabaseRest(env, "qr_sources", {
+    query: {
+      select: "id,name,public_id,source_type,is_active",
+      restaurant_id: `eq.${restaurantId}`,
+      public_id: `eq.${normalized}`,
+      is_active: "eq.true",
+      limit: "1",
+    },
+  });
+  return rows[0] || null;
+}
+
+async function getMenuCategoryMeta(env) {
+  try {
+    return await supabaseRest(env, "content_items", {
+      query: {
+        select: "*",
+        content_type: "eq.menu_category",
+        order: "sort_order.asc",
+      },
+    });
+  } catch (error) {
+    console.warn("[tekemet-admin-function] category metadata read skipped", error?.message || error);
+    return [];
+  }
+}
+
+function mergeCategoryMeta(categories, metadata, archivedSections) {
+  const result = new Map((categories || []).map((category) => [category.id, category]));
+  for (const row of metadata || []) {
+    const id = sanitizeSectionKey(row.section_key || row.content_key?.replace(/^category-/, "") || "");
+    if (!id || archivedSections?.has(id)) continue;
+    const existing = result.get(id) || normalizeVirtualCategory({ id });
+    result.set(id, normalizeVirtualCategory({
+      ...existing,
+      id,
+      name_ru: row.title_ru || existing.name_ru,
+      name_kz: row.title_kk || existing.name_kz,
+      name_en: row.title_en || existing.name_en,
+      sort_order: Number(row.sort_order ?? existing.sort_order ?? existing.sort ?? 0),
+      is_active: row.is_active !== false,
+    }));
+  }
+  return [...result.values()].sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0) || left.id.localeCompare(right.id));
+}
+
+async function upsertMenuCategoryMeta(env, category) {
+  const sectionKey = sanitizeSectionKey(category.section_key || category.id);
+  const existing = await supabaseRest(env, "content_items", {
+    query: { select: "id", content_type: "eq.menu_category", section_key: `eq.${sectionKey}`, limit: "1" },
+  }).catch(() => []);
+  const payload = {
+    content_type: "menu_category",
+    content_key: `category-${sectionKey}`,
+    section_key: sectionKey,
+    title_ru: clean(category.name_ru || category.title_ru),
+    title_kk: clean(category.name_kz || category.title_kk),
+    title_en: clean(category.name_en || category.title_en),
+    description_ru: "",
+    description_kk: "",
+    description_en: "",
+    price: 0,
+    currency: "KZT",
+    is_active: category.is_active !== false,
+    sort_order: Number(category.sort_order || category.sort || getSectionSort(sectionKey)),
+  };
+  await supabaseRest(env, "content_items", {
+    method: existing[0] ? "PATCH" : "POST",
+    query: existing[0] ? { id: `eq.${existing[0].id}` } : {},
+    body: existing[0] ? payload : [payload],
+    prefer: "return=minimal",
+  });
+}
+
+async function deleteMenuCategoryMeta(env, sectionKey) {
+  await supabaseRest(env, "content_items", {
+    method: "DELETE",
+    query: { content_type: "eq.menu_category", section_key: `eq.${sanitizeSectionKey(sectionKey)}` },
+    prefer: "return=minimal",
+  }).catch((error) => console.warn("[tekemet-admin-function] category metadata delete skipped", error?.message || error));
+}
+
 async function getMenuHeroContentItem(env) {
   const rows = await supabaseRest(env, "content_items", {
     query: {
@@ -695,15 +894,6 @@ async function getMenuHeroContentItem(env) {
   return rows.find(isMenuHeroContentItem) || null;
 }
 
-async function getAnalyticsEvents(env, slug, fromDate) {
-  try {
-    const rows = await readAnalyticsEvents(env, slug, fromDate);
-    return rows;
-  } catch (error) {
-    console.warn("[tekemet-admin-function] analytics read skipped", error?.message || error);
-    return [];
-  }
-}
 
 async function writeAnalyticsEvent(env, slug, payload) {
   const restaurantId = await getRestaurantId(env, slug);
@@ -717,6 +907,11 @@ async function writeAnalyticsEvent(env, slug, payload) {
     session_id: payload.sessionId || null,
     user_agent: payload.userAgent || null,
     referrer: packedDishReferrer || payload.referrer || null,
+    category_id: payload.sectionKey || null,
+    qr_source_id: payload.qrSourceId || null,
+    source_fallback: payload.sourceFallback || "direct",
+    duration_ms: payload.durationMs,
+    metadata: payload.metadata || {},
   };
 
   try {
@@ -728,99 +923,33 @@ async function writeAnalyticsEvent(env, slug, payload) {
     return true;
   } catch (menuAnalyticsError) {
     try {
-      return await writeFallbackAnalyticsEvent(env, payload);
-    } catch (contentItemsError) {
+      const legacyPayload = { ...menuAnalyticsPayload };
+      delete legacyPayload.category_id;
+      delete legacyPayload.qr_source_id;
+      delete legacyPayload.source_fallback;
+      delete legacyPayload.duration_ms;
+      delete legacyPayload.metadata;
+      await supabaseRest(env, "menu_analytics_events", {
+        method: "POST",
+        body: [legacyPayload],
+        prefer: "return=minimal",
+      });
+      return true;
+    } catch (legacyAnalyticsError) {
+      try {
+        return await writeFallbackAnalyticsEvent(env, payload);
+      } catch (contentItemsError) {
       console.warn("[tekemet-admin-function] analytics write fallback failed", {
         menuAnalyticsError: menuAnalyticsError?.message || String(menuAnalyticsError),
+        legacyAnalyticsError: legacyAnalyticsError?.message || String(legacyAnalyticsError),
         contentItemsError: contentItemsError?.message || String(contentItemsError),
       });
       return false;
+      }
     }
   }
 }
 
-async function readAnalyticsEvents(env, slug, fromDate) {
-  const restaurantId = await getRestaurantId(env, slug);
-
-  try {
-    const rows = await supabaseRest(env, "menu_analytics_events", {
-      query: {
-        select: "id,event_type,menu_item_id,language,device_type,session_id,referrer,user_agent,created_at",
-        ...(restaurantId ? { restaurant_id: `eq.${restaurantId}` } : {}),
-        ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
-        order: "created_at.desc",
-        limit: "10000",
-      },
-    });
-
-    const primaryRows = rows.map((row) => {
-      const packedDish = unpackDishAnalyticsReferrer(row.referrer);
-      return {
-        id: row.id,
-        event_type: row.event_type,
-        menu_item_id: row.menu_item_id || packedDish?.dishId || null,
-        content_key: packedDish?.contentKey || null,
-        dish_title: packedDish?.title || null,
-        section_key: packedDish?.section || null,
-        duration_ms: Number(packedDish?.durationMs || 0) || null,
-        language: row.language || null,
-        device_type: row.device_type || null,
-        session_id: row.session_id || null,
-        referrer: row.referrer || null,
-        user_agent: row.user_agent || null,
-        created_at: row.created_at,
-      };
-    });
-    const fallbackRows = await readFallbackAnalyticsEvents(env, fromDate);
-    return mergeAnalyticsEvents(primaryRows, fallbackRows);
-  } catch (menuAnalyticsError) {
-    console.warn("[tekemet-admin-function] menu_analytics_events read failed", menuAnalyticsError?.message || menuAnalyticsError);
-  }
-
-  return readFallbackAnalyticsEvents(env, fromDate);
-}
-
-async function readFallbackAnalyticsEvents(env, fromDate) {
-  const rows = await supabaseRest(env, "content_items", {
-    query: {
-      select: "id,section_key,content_key,title_ru,title_en,title_kk,description_ru,description_en,description_kk,badge_ru,created_at",
-      content_type: "eq.analytics_event",
-      ...(fromDate ? { created_at: `gte.${fromDate.toISOString()}` } : {}),
-      order: "created_at.desc",
-      limit: "10000",
-    },
-  });
-  return rows.map((row) => ({
-    id: row.id,
-    event_type: row.section_key,
-    menu_item_id: row.title_ru || (String(row.content_key || "").startsWith("analytics-") ? row.description_en : row.content_key) || null,
-    content_key: row.content_key || null,
-    dish_title: row.description_en || null,
-    section_key: row.description_kk || null,
-    language: row.title_en || null,
-    device_type: row.title_kk || null,
-    session_id: row.description_ru || null,
-    duration_ms: Number(row.badge_ru || 0) || null,
-    created_at: row.created_at,
-  }));
-}
-
-function mergeAnalyticsEvents(primaryRows, fallbackRows) {
-  const seen = new Set();
-  return [...(primaryRows || []), ...(fallbackRows || [])]
-    .filter((event) => {
-      const key = [
-        event.event_type || "",
-        event.menu_item_id || event.content_key || "",
-        event.session_id || "",
-        event.created_at || "",
-      ].join("|");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-}
 
 async function getRestaurantId(env, slug) {
   try {
@@ -837,49 +966,6 @@ async function getRestaurantId(env, slug) {
   }
 }
 
-async function getContentDishNames(env, dishIds) {
-  if (!dishIds.length) return {};
-  const databaseIds = dishIds.filter((id) => isDatabaseId(id));
-  const contentKeys = dishIds.filter((id) => !isDatabaseId(id)).map((id) => clean(id)).filter(Boolean);
-  const rows = [];
-
-  if (databaseIds.length) {
-    rows.push(...await supabaseRest(env, "content_items", {
-      query: {
-        select: "id,title_ru,title_en,title_kk,content_key",
-        content_type: "eq.menu",
-        id: `in.(${databaseIds.join(",")})`,
-      },
-    }));
-  }
-
-  for (const contentKey of contentKeys) {
-    const found = await supabaseRest(env, "content_items", {
-      query: {
-        select: "id,title_ru,title_en,title_kk,content_key",
-        content_type: "eq.menu",
-        content_key: `eq.${contentKey}`,
-        limit: "1",
-      },
-    });
-    rows.push(...found);
-  }
-
-  return rows.reduce((acc, row) => {
-    const name = clean(row.title_ru || row.title_kk || row.title_en || row.content_key || "\u0411\u043b\u044e\u0434\u043e \u0431\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f");
-    acc[row.id] = name;
-    if (row.content_key) acc[row.content_key] = name;
-    return acc;
-  }, {});
-}
-
-function getAnalyticsDishFallbackTitle(value) {
-  const normalized = clean(value);
-  if (!normalized || isDatabaseId(normalized) || normalized.startsWith("analytics-")) {
-    return "\u0411\u043b\u044e\u0434\u043e \u0431\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f";
-  }
-  return normalized;
-}
 
 async function resolveAnalyticsContentItemId(env, menuItemId, contentKey = "") {
   const normalizedId = clean(menuItemId);
@@ -920,11 +1006,6 @@ function shouldUsePrimaryMenuItemId(value) {
   return Boolean(normalized && /^[1-9]\d*$/.test(normalized));
 }
 
-function shouldUseContentAnalyticsFallback(payload) {
-  if (!["dish_open", "dish_close", "dish_photo_open"].includes(payload.eventType)) return false;
-  const menuItemId = clean(payload.menuItemId);
-  return Boolean(menuItemId && !/^[1-9]\d*$/.test(menuItemId));
-}
 
 function packDishAnalyticsReferrer(payload) {
   if (!payload || !["dish_open", "dish_close", "dish_photo_open"].includes(payload.eventType)) return "";
@@ -939,24 +1020,6 @@ function packDishAnalyticsReferrer(payload) {
   return `dish:${encoded}`;
 }
 
-function unpackDishAnalyticsReferrer(value) {
-  const raw = clean(value);
-  if (!raw.startsWith("dish:")) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(raw.slice(5), "base64url").toString("utf8"));
-    return {
-      dishId: cleanLimited(parsed.dishId, 160) || "",
-      contentKey: cleanLimited(parsed.contentKey, 160) || "",
-      title: cleanLimited(parsed.title, 240) || "",
-      section: cleanLimited(parsed.section, 120) || "",
-      price: cleanLimited(parsed.price, 80) || "",
-      currency: cleanLimited(parsed.currency, 16) || "",
-      durationMs: cleanLimited(parsed.durationMs, 40) || "",
-    };
-  } catch {
-    return null;
-  }
-}
 
 async function writeFallbackAnalyticsEvent(env, payload) {
   await supabaseRest(env, "content_items", {
@@ -1098,42 +1161,6 @@ function normalizeVirtualCategory(category) {
   };
 }
 
-function normalizeSplitTargets(rawTargets, usedKeys, sourceKey) {
-  const targets = Array.isArray(rawTargets) ? rawTargets.slice(0, 2) : [];
-  const nextUsed = new Set([...(usedKeys || []), sourceKey]);
-  return targets.map((target, index) => {
-    const name = clean(target?.name_ru || target?.title_ru || target?.name || "");
-    if (!name) throw new Error("Укажите названия двух новых разделов.");
-    const sectionKey = makeUniqueSectionKey(target?.section_key || target?.id || name, nextUsed, index + 1);
-    nextUsed.add(sectionKey);
-    return {
-      clientId: clean(target?.clientId || target?.client_id || target?.id || `target-${index + 1}`),
-      section_key: sectionKey,
-      name_ru: name,
-    };
-  });
-}
-
-function normalizeSplitAssignments(rawAssignments) {
-  const map = new Map();
-  if (Array.isArray(rawAssignments)) {
-    rawAssignments.forEach((entry) => {
-      const itemId = clean(entry?.itemId || entry?.item_id || entry?.id);
-      const targetId = clean(entry?.targetClientId || entry?.target_client_id || entry?.targetId || entry?.target_id);
-      if (itemId && targetId) map.set(itemId, targetId);
-    });
-    return map;
-  }
-
-  if (rawAssignments && typeof rawAssignments === "object") {
-    Object.entries(rawAssignments).forEach(([itemId, targetId]) => {
-      const cleanItemId = clean(itemId);
-      const cleanTargetId = clean(targetId);
-      if (cleanItemId && cleanTargetId) map.set(cleanItemId, cleanTargetId);
-    });
-  }
-  return map;
-}
 
 function makeUniqueSectionKey(value, usedKeys, suffix) {
   const base = sanitizeSectionKey(value || `section-${suffix}`);
@@ -1295,27 +1322,27 @@ function getConfigError(env) {
   const serviceRoleKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   const sessionSecret = getSessionSecret(env);
 
-  if (!supabaseUrl) return "Exort admin backend is not configured";
-  if (!isAsciiPrintable(supabaseUrl)) return "Exort admin backend is not configured";
+  if (!supabaseUrl) return ADMIN_NOT_CONFIGURED;
+  if (!isAsciiPrintable(supabaseUrl)) return ADMIN_NOT_CONFIGURED;
 
   try {
     const parsedUrl = new URL(supabaseUrl);
     if (!["https:", "http:"].includes(parsedUrl.protocol)) {
-      return "Exort admin backend is not configured";
+      return ADMIN_NOT_CONFIGURED;
     }
   } catch {
-    return "Exort admin backend is not configured";
+    return ADMIN_NOT_CONFIGURED;
   }
 
-  if (!serviceRoleKey) return "Exort admin backend is not configured";
+  if (!serviceRoleKey) return ADMIN_NOT_CONFIGURED;
   if (!isAsciiToken(serviceRoleKey)) {
-    return "Exort admin backend is not configured";
+    return ADMIN_NOT_CONFIGURED;
   }
 
-  if (!sessionSecret) return "Exort admin backend is not configured";
-  if (!getAdminPin(env)) return "Exort admin backend is not configured";
+  if (!sessionSecret) return ADMIN_NOT_CONFIGURED;
+  if (!getAdminPin(env)) return ADMIN_NOT_CONFIGURED;
   if (!isAsciiPrintable(sessionSecret)) {
-    return "Exort admin backend is not configured";
+    return ADMIN_NOT_CONFIGURED;
   }
 
   return "";
@@ -1392,6 +1419,7 @@ async function hmac(env, value) {
 }
 
 function getSessionSecret(env) {
+  // Keep legacy Netlify variable names until the production environment is migrated.
   return String(env.TEKEMET_ADMIN_SESSION_SECRET || env.EXORT_ADMIN_SESSION_SECRET || "").trim();
 }
 
@@ -1443,7 +1471,7 @@ function cleanLimited(value, maxLength) {
 
 function normalizeEventType(value) {
   const normalized = clean(value);
-  return ["menu_open", "dish_open", "dish_close", "dish_photo_open", "language_change"].includes(normalized) ? normalized : "";
+  return ["menu_open", "session_start", "category_view", "dish_open", "dish_close", "dish_photo_open", "search", "search_no_results", "language_change", "menu_exit"].includes(normalized) ? normalized : "";
 }
 
 function normalizeDeviceType(value) {
@@ -1454,7 +1482,13 @@ function normalizeDeviceType(value) {
 function normalizeAnalyticsLanguage(value) {
   const normalized = clean(value).toLowerCase();
   if (normalized === "kz") return "kk";
-  return ["ru", "kk", "en"].includes(normalized) ? normalized : null;
+  return ["ru", "kk", "en", "tr"].includes(normalized) ? normalized : null;
+}
+
+function normalizeAnalyticsDuration(value) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration)) return null;
+  return Math.max(0, Math.min(86400000, Math.round(duration)));
 }
 
 function isUuid(value) {
@@ -1466,497 +1500,6 @@ function isDatabaseId(value) {
   return isUuid(normalized) || /^[1-9]\d*$/.test(normalized);
 }
 
-function startOfUtcDay(date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function getRangeStart(range, todayStart, last7Start, last30Start) {
-  if (range === "today") return todayStart;
-  if (range === "30d") return last30Start;
-  if (range === "all") return null;
-  return last7Start;
-}
-
-function normalizeAnalyticsRange(range) {
-  const value = String(range || "today").toLowerCase();
-  if (value === "week") return "7d";
-  if (value === "month") return "30d";
-  if (value === "year") return "year";
-  if (value === "today" || value === "7d" || value === "30d" || value === "all") return value;
-  return "today";
-}
-
-function getRangeStartKey(range, todayKey, last7StartKey, last30StartKey, yearStartKey) {
-  if (range === "today") return todayKey;
-  if (range === "30d") return last30StartKey;
-  if (range === "year") return yearStartKey;
-  if (range === "all") return null;
-  return last7StartKey;
-}
-
-function isWithin(value, from, to) {
-  const time = new Date(value).getTime();
-  return time >= from.getTime() && time < to.getTime();
-}
-
-function isWithinDateKeys(value, fromKey, toKey, timeZone) {
-  const key = formatDateKeyInTimeZone(value, timeZone);
-  if (fromKey && key < fromKey) return false;
-  if (toKey && key >= toKey) return false;
-  return true;
-}
-
-function withAnalyticsLocalTime(event, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const parts = getTimeZoneParts(event.created_at, timeZone);
-  return {
-    ...event,
-    localDateKey: `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`,
-    localHour: parts.hour,
-    localMonth: parts.month,
-    localYear: parts.year,
-  };
-}
-
-function isEventWithinLocalDateRange(event, fromKey, toKey) {
-  const key = event.localDateKey;
-  if (!key) return false;
-  if (fromKey && key < fromKey) return false;
-  if (toKey && key >= toKey) return false;
-  return true;
-}
-
-function isEventOnOrAfterLocalDate(event, fromKey) {
-  if (!fromKey) return true;
-  return Boolean(event.localDateKey && event.localDateKey >= fromKey);
-}
-
-function countEventsByLocalDateRange(events, eventType, fromKey, toKey) {
-  return events.filter((event) => (
-    event.event_type === eventType &&
-    isEventWithinLocalDateRange(event, fromKey, toKey)
-  )).length;
-}
-
-function countUniqueSessionsByLocalDateRange(events, fromKey, toKey) {
-  return new Set(events
-    .filter((event) => (
-      event.event_type === "menu_open" &&
-      event.session_id &&
-      isEventWithinLocalDateRange(event, fromKey, toKey)
-    ))
-    .map((event) => event.session_id)).size;
-}
-
-function countEvents(events, eventType, from) {
-  const fromTime = from.getTime();
-  return events.filter((event) => event.event_type === eventType && new Date(event.created_at).getTime() >= fromTime).length;
-}
-
-function countEventsByDateRange(events, eventType, fromKey, toKey, timeZone) {
-  return events.filter((event) => (
-    event.event_type === eventType &&
-    isWithinDateKeys(event.created_at, fromKey, toKey, timeZone)
-  )).length;
-}
-
-function countUniqueSessions(events, from) {
-  const fromTime = from ? from.getTime() : 0;
-  return new Set(events
-    .filter((event) => event.event_type === "menu_open" && event.session_id && new Date(event.created_at).getTime() >= fromTime)
-    .map((event) => event.session_id)).size;
-}
-
-function countUniqueSessionsByDateRange(events, fromKey, toKey, timeZone) {
-  return new Set(events
-    .filter((event) => (
-      event.event_type === "menu_open" &&
-      event.session_id &&
-      isWithinDateKeys(event.created_at, fromKey, toKey, timeZone)
-    ))
-    .map((event) => event.session_id)).size;
-}
-
-function countBy(rows, key) {
-  return rows.reduce((acc, row) => {
-    const value = row[key];
-    if (!value) return acc;
-    acc[value] = (acc[value] || 0) + 1;
-    return acc;
-  }, {});
-}
-
-function calculateAverageDishViewTime(events) {
-  const sorted = [...(events || [])].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  const openByKey = new Map();
-  const durations = [];
-  const minimumMs = 1200;
-  const maximumMs = 15 * 60 * 1000;
-
-  sorted.forEach((event) => {
-    if (event.event_type !== "dish_open" && event.event_type !== "dish_close") return;
-    const key = [
-      event.session_id || "session",
-      event.menu_item_id || event.content_key || "dish",
-    ].join("|");
-
-    if (event.event_type === "dish_open") {
-      openByKey.set(key, new Date(event.created_at).getTime());
-      return;
-    }
-
-    const explicitDuration = Number(event.duration_ms || 0);
-    const openedAt = openByKey.get(key);
-    const duration = explicitDuration > 0
-      ? explicitDuration
-      : openedAt
-        ? new Date(event.created_at).getTime() - openedAt
-        : 0;
-
-    if (duration >= minimumMs && duration <= maximumMs) {
-      durations.push(duration);
-    }
-    openByKey.delete(key);
-  });
-
-  if (!durations.length) return null;
-  return Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length / 1000);
-}
-
-function formatAverageViewTime(seconds) {
-  const value = Number(seconds || 0);
-  if (!value) return null;
-  if (value < 60) return `${value} сек`;
-  const minutes = Math.floor(value / 60);
-  const rest = value % 60;
-  return rest ? `${minutes} мин ${rest} сек` : `${minutes} мин`;
-}
-
-function buildVisitsByHour(menuOpenEvents) {
-  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, visits: 0 }));
-  menuOpenEvents.forEach((event) => {
-    const hour = new Date(event.created_at).getUTCHours();
-    hours[hour].visits += 1;
-  });
-  return hours;
-}
-
-function buildVisitsByDay(events, start, todayStart) {
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start.getTime() + index * 24 * 60 * 60 * 1000);
-    const next = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-    return {
-      date: formatDateKey(date),
-      label: formatWeekday(date),
-      visits: events.filter((event) => event.event_type === "menu_open" && isWithin(event.created_at, date, next)).length,
-      isToday: formatDateKey(date) === formatDateKey(todayStart),
-    };
-  });
-}
-
-function buildVisitsByWeek(events, start, todayStart) {
-  const days = Array.from({ length: 30 }, (_, index) => {
-    const date = new Date(start.getTime() + index * 24 * 60 * 60 * 1000);
-    const next = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-    return {
-      date: formatDateKey(date),
-      label: formatWeekday(date),
-      shortLabel: String(date.getUTCDate()).padStart(2, "0"),
-      visits: events.filter((event) => event.event_type === "menu_open" && isWithin(event.created_at, date, next)).length,
-      isToday: formatDateKey(date) === formatDateKey(todayStart),
-    };
-  });
-
-  const weeks = [];
-  for (let index = 0; index < days.length; index += 7) {
-    weeks.push({
-      weekLabel: `Неделя ${weeks.length + 1}`,
-      days: days.slice(index, index + 7),
-    });
-  }
-  return weeks;
-}
-
-function buildVisitsByMonth(events, year) {
-  const labels = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-  return labels.map((label, index) => {
-    const start = new Date(Date.UTC(year, index, 1));
-    const end = new Date(Date.UTC(year, index + 1, 1));
-    return {
-      month: index + 1,
-      label,
-      visits: events.filter((event) => event.event_type === "menu_open" && isWithin(event.created_at, start, end)).length,
-    };
-  });
-}
-
-function buildDayDetails(events, start, todayStart) {
-  const details = {};
-  Array.from({ length: 30 }, (_, index) => {
-    const date = new Date(start.getTime() + index * 24 * 60 * 60 * 1000);
-    const next = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-    const dayEvents = events.filter((event) => event.event_type === "menu_open" && isWithin(event.created_at, date, next));
-    details[formatDateKey(date)] = {
-      date: formatDateKey(date),
-      label: formatDateLabel(date),
-      hours: buildVisitsByHour(dayEvents),
-      isToday: formatDateKey(date) === formatDateKey(todayStart),
-    };
-  });
-  return details;
-}
-
-function buildAllTimeSummary(events) {
-  const menuOpenEvents = events.filter((event) => event.event_type === "menu_open");
-  const dishOpenEvents = events.filter((event) => event.event_type === "dish_open");
-  const monthCounts = countBy(menuOpenEvents.map((event) => ({ month: new Date(event.created_at).getUTCMonth() + 1 })), "month");
-  const busiestMonthEntry = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0];
-  const monthLabels = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-
-  return {
-    totalVisits: menuOpenEvents.length,
-    totalUniqueGuests: new Set(menuOpenEvents.filter((event) => event.session_id).map((event) => event.session_id)).size,
-    totalDishOpens: dishOpenEvents.length,
-    busiestMonth: busiestMonthEntry ? monthLabels[Number(busiestMonthEntry[0]) - 1] : "Нет данных",
-  };
-}
-
-function formatDateKey(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function formatWeekday(date) {
-  return ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][date.getUTCDay()];
-}
-
-function formatDateLabel(date) {
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", timeZone: "UTC" }).format(date);
-}
-
-function buildPercentRows(events, key, outputKey, format = (value) => value) {
-  const counts = countBy(events.filter((event) => event[key]), key);
-  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-  if (!total) return [];
-  return Object.entries(counts)
-    .map(([value, count]) => ({ [outputKey]: format(value), count, percent: Math.round((count / total) * 100) }))
-    .sort((a, b) => b.count - a.count);
-}
-
-function buildRecentEvents(events, dishNames) {
-  return events.map((event) => {
-    let label = "Открыли меню";
-    if (event.event_type === "dish_open") label = `Открыли карточку ${dishNames[event.menu_item_id] || "блюда"}`;
-    if (event.event_type === "language_change") label = `Сменили язык на ${String(event.language || "").toUpperCase() || "другой"}`;
-    return {
-      type: event.event_type,
-      label,
-      createdAt: event.created_at,
-    };
-  });
-}
-
-function buildVisitsByHour(menuOpenEvents, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, visits: 0 }));
-  menuOpenEvents.forEach((event) => {
-    const hour = Number.isInteger(event.localHour) ? event.localHour : getTimeZoneParts(event.created_at, timeZone).hour;
-    hours[hour].visits += 1;
-  });
-  return hours;
-}
-
-function buildVisitsByDay(events, startKey, todayKey, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  return Array.from({ length: 7 }, (_, index) => {
-    const dateKey = shiftDateKey(startKey, index);
-    const nextKey = shiftDateKey(dateKey, 1);
-    return {
-      date: dateKey,
-      label: formatWeekdayFromDateKey(dateKey),
-      fullLabel: formatDateLabelFromDateKey(dateKey),
-      visits: countEventsByLocalDateRange(events, "menu_open", dateKey, nextKey),
-      isToday: dateKey === todayKey,
-    };
-  });
-}
-
-function buildVisitsByWeek(events, startKey, todayKey, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const days = Array.from({ length: 30 }, (_, index) => {
-    const dateKey = shiftDateKey(startKey, index);
-    const nextKey = shiftDateKey(dateKey, 1);
-    return {
-      date: dateKey,
-      label: formatWeekdayFromDateKey(dateKey),
-      fullLabel: formatDateLabelFromDateKey(dateKey),
-      shortLabel: dateKey.slice(8, 10),
-      visits: countEventsByLocalDateRange(events, "menu_open", dateKey, nextKey),
-      isToday: dateKey === todayKey,
-    };
-  });
-
-  const weeks = [];
-  for (let index = 0; index < days.length; index += 7) {
-    weeks.push({
-      weekLabel: `Неделя ${weeks.length + 1}`,
-      days: days.slice(index, index + 7),
-    });
-  }
-  return weeks;
-}
-
-function buildVisitsByMonth(events, year, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const labels = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-  return labels.map((label, index) => {
-    const startKey = `${year}-${String(index + 1).padStart(2, "0")}-01`;
-    const endKey = index === 11 ? `${year + 1}-01-01` : `${year}-${String(index + 2).padStart(2, "0")}-01`;
-    return {
-      month: index + 1,
-      label,
-      visits: countEventsByLocalDateRange(events, "menu_open", startKey, endKey),
-    };
-  });
-}
-
-function buildDayDetails(events, startKey, todayKey, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const details = {};
-  Array.from({ length: 30 }, (_, index) => {
-    const dateKey = shiftDateKey(startKey, index);
-    const nextKey = shiftDateKey(dateKey, 1);
-    const dayEvents = events.filter((event) => (
-      event.event_type === "menu_open" &&
-      isEventWithinLocalDateRange(event, dateKey, nextKey)
-    ));
-    details[dateKey] = {
-      date: dateKey,
-      label: formatDateLabelFromDateKey(dateKey),
-      hours: buildVisitsByHour(dayEvents, timeZone),
-      isToday: dateKey === todayKey,
-    };
-  });
-  return details;
-}
-
-function buildAllTimeSummary(events, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const menuOpenEvents = events.filter((event) => event.event_type === "menu_open");
-  const dishOpenEvents = events.filter((event) => event.event_type === "dish_open");
-  const monthCounts = countBy(menuOpenEvents.map((event) => ({ month: getTimeZoneParts(event.created_at, timeZone).month })), "month");
-  const busiestMonthEntry = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0];
-  const monthLabels = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-
-  return {
-    totalVisits: menuOpenEvents.length,
-    totalUniqueGuests: new Set(menuOpenEvents.filter((event) => event.session_id).map((event) => event.session_id)).size,
-    totalDishOpens: dishOpenEvents.length,
-    busiestMonth: busiestMonthEntry ? monthLabels[Number(busiestMonthEntry[0]) - 1] : "Нет данных",
-  };
-}
-
-function buildRecentEvents(events, dishNames, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  return events.map((event) => {
-    let label = "\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u043c\u0435\u043d\u044e";
-    if (event.event_type === "dish_open") {
-      const dishName = dishNames[event.menu_item_id] || dishNames[event.content_key] || event.dish_title || getAnalyticsDishFallbackTitle(event.menu_item_id || event.content_key);
-      label = `\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443 ${dishName}`;
-    }
-    if (event.event_type === "dish_photo_open") {
-      const dishName = dishNames[event.menu_item_id] || dishNames[event.content_key] || event.dish_title || getAnalyticsDishFallbackTitle(event.menu_item_id || event.content_key);
-      label = `\u041e\u0442\u043a\u0440\u044b\u043b\u0438 \u0444\u043e\u0442\u043e \u0431\u043b\u044e\u0434\u0430: ${dishName}`;
-    }
-    if (event.event_type === "language_change") label = `\u0421\u043c\u0435\u043d\u0438\u043b\u0438 \u044f\u0437\u044b\u043a \u043d\u0430 ${String(event.language || "").toUpperCase() || "\u0434\u0440\u0443\u0433\u043e\u0439"}`;
-    return {
-      type: event.event_type,
-      label,
-      createdAt: event.created_at,
-      displayTime: formatTimeInTimeZone(event.created_at, timeZone),
-    };
-  });
-}
-
-function selectRecentEventsForDisplay(events) {
-  const visibleEvents = (events || []).filter((event) => event.event_type !== "dish_close");
-  const latest = visibleEvents.slice(0, 7);
-  const latestDishOpens = visibleEvents.filter((event) => ["dish_open", "dish_photo_open"].includes(event.event_type)).slice(0, 3);
-  const seen = new Set();
-  return [...latest, ...latestDishOpens]
-    .filter((event) => {
-      const key = [
-        event.event_type || "",
-        event.menu_item_id || event.content_key || "",
-        event.session_id || "",
-        event.created_at || "",
-      ].join("|");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 10);
-}
-function getTimeZoneParts(value, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(value));
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-    second: Number(map.second),
-  };
-}
-
-function formatDateKeyInTimeZone(value, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  const parts = getTimeZoneParts(value, timeZone);
-  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
-function shiftDateKey(dateKey, offsetDays) {
-  const [year, month, day] = String(dateKey).split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + offsetDays));
-  return date.toISOString().slice(0, 10);
-}
-
-function dateKeyToUtcDate(dateKey) {
-  const [year, month, day] = String(dateKey).split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function formatWeekdayFromDateKey(dateKey) {
-  const date = dateKeyToUtcDate(dateKey);
-  return ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][date.getUTCDay()];
-}
-
-function formatDateLabelFromDateKey(dateKey) {
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", timeZone: "UTC" }).format(dateKeyToUtcDate(dateKey));
-}
-
-function formatTimeInTimeZone(value, timeZone = DEFAULT_RESTAURANT_TIME_ZONE) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(value));
-}
-
-function cleanOrNull(value) {
-  const normalized = clean(value);
-  return normalized || null;
-}
-
-function cleanIntegerOrNull(value) {
-  const normalized = clean(value);
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.round(parsed);
-}
 
 function transliterateCyrillic(value) {
   const map = {

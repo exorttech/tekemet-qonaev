@@ -19,11 +19,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/tekemet-admin.css?v=13" />
     <link rel="stylesheet" href="css/tekemet-admin-navigation.css?v=1" />
-    <script defer src="js/tekemet-admin-api.js?v=2"></script>
+  <link rel="stylesheet" href="css/tekemet-admin-exort.css?v=2" />
+  <link rel="stylesheet" href="css/tekemet-admin-exort-components.css?v=4" />
+    <script defer src="js/tekemet-admin-api.js?v=3"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script defer src="js/tekemet-admin.js?v=14"></script>
+    <script defer src="js/tekemet-admin-analytics.js?v=2"></script>
+    <script defer src="js/tekemet-admin-qr.js?v=2"></script>
+    <script defer src="js/tekemet-admin.js?v=17"></script>
   </head>
-  <body>
+  <body class="demo-admin-live">
     <svg class="icon-sprite" aria-hidden="true">
       <symbol id="icon-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
       <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M16 3v7a3 3 0 0 0 3 3h1"/><path d="M20 3v18"/><path d="M8 3v18"/><path d="M4 3v5a4 4 0 0 0 8 0V3"/></symbol>
@@ -41,9 +45,9 @@
       <div class="login-orb login-orb--one"></div>
       <div class="login-orb login-orb--two"></div>
       <div class="login-card">
-        <div class="login-brand"><span>E</span><strong>Exort Admin</strong></div>
+        <div class="login-brand"><strong>Exort Admin<i aria-hidden="true"></i></strong></div>
         <div class="restaurant-identity">
-          <div class="restaurant-avatar" data-restaurant-initial>E</div>
+          <div class="restaurant-avatar restaurant-avatar--logo"><img src="images/tekemet-admin-logo.jpeg" alt="" /></div>
           <div><strong data-restaurant-name>Tekemet Qonaev</strong><span><i></i> Система Exort подключена</span></div>
         </div>
         <div class="login-copy">
@@ -66,9 +70,9 @@
 
     <div class="app-shell" data-app-shell hidden>
       <aside class="sidebar">
-        <div class="sidebar-product"><span class="exort-mark">E</span><strong>Exort</strong><small>Панель управления</small></div>
+        <div class="sidebar-product"><strong>Exort<i aria-hidden="true"></i></strong><small>Панель управления</small></div>
         <div class="side-restaurant sidebar-restaurant">
-          <div class="restaurant-avatar" data-restaurant-initial>E</div>
+          <div class="restaurant-avatar restaurant-avatar--logo"><img src="images/tekemet-admin-logo.jpeg" alt="" /></div>
           <div><strong data-restaurant-name>Tekemet Qonaev</strong><span><i></i> Меню опубликовано</span></div>
         </div>
         <nav class="side-nav" aria-label="Разделы панели">
@@ -143,7 +147,7 @@
         </section>
 
         <section class="view" data-view="stoplist">
-          <div class="section-toolbar"><p>Меняйте доступность блюда за одно действие.</p><span class="autosave-status">Изменения сохраняются автоматически</span></div>
+          <div class="section-toolbar stop-list-toolbar"><div><p>Меняйте доступность блюда за одно действие.</p><span class="autosave-status">Изменения сохраняются автоматически</span></div><button class="primary-button compact" type="button" data-open-stop-picker>Добавить</button></div>
           <div class="stop-list" data-stop-list></div>
         </section>
 
@@ -271,9 +275,12 @@
       <nav class="mobile-nav" aria-label="Мобильная навигация">
         <button class="is-active" type="button" data-nav="overview" aria-label="Обзор"><svg><use href="#icon-dashboard"/></svg><span>Обзор</span></button>
         <button type="button" data-nav="menu" aria-label="Меню"><svg><use href="#icon-menu"/></svg><span>Меню</span></button>
+        <button type="button" data-nav="categories" aria-label="Категории"><svg><use href="#icon-categories"/></svg><span>Разделы</span></button>
         <button type="button" data-nav="stoplist" aria-label="Стоп-лист"><svg><use href="#icon-stop"/></svg><span>Стоп</span></button>
         <button type="button" data-nav="analytics" aria-label="Аналитика"><svg><use href="#icon-analytics"/></svg><span>Аналитика</span></button>
         <button type="button" data-nav="qr" aria-label="QR-коды"><svg><use href="#icon-qr"/></svg><span>QR</span></button>
+        <button type="button" data-nav="settings" aria-label="Настройки"><svg><use href="#icon-categories"/></svg><span>Настройки</span></button>
+        <button type="button" data-nav="integrations" aria-label="Интеграции"><svg><use href="#icon-external"/></svg><span>Интеграции</span></button>
       </nav>
     </div>
 
@@ -372,28 +379,34 @@
       </form>
     </aside>
 
-    <dialog class="confirm-dialog category-dialog" data-category-dialog>
-      <form class="settings-form" data-category-form>
+    <dialog class="confirm-dialog category-dialog category-management-dialog" data-category-dialog>
+      <form class="settings-form category-form" data-category-form>
         <input type="hidden" name="id" />
-        <p class="kicker">Структура меню</p>
-        <h2 data-category-dialog-title>Новая категория</h2>
-        <label>Название категории<input name="name" maxlength="80" autocomplete="off" required /></label>
-        <div><button type="button" class="secondary-button compact" data-close-category>Отмена</button><button type="submit" class="primary-button compact">Сохранить</button></div>
+        <header class="category-modal-header"><div><p class="kicker">Структура меню</p><h2 data-category-dialog-title>Новая категория</h2></div><button class="category-modal-close" type="button" data-close-category aria-label="Закрыть">×</button></header>
+        <div class="category-form-fields">
+          <label>Название (рус.)<input name="name_ru" maxlength="80" autocomplete="off" required /><span class="field-hint">Все три названия обязательны.</span></label>
+          <label>Название (каз.)<input name="name_kz" maxlength="80" autocomplete="off" required /></label>
+          <label>Название (англ.)<input name="name_en" maxlength="80" autocomplete="off" required /></label>
+        </div>
+        <button class="secondary-button category-translate-action" type="button" data-category-auto-translate>Автоперевести с русского</button>
+        <button class="category-split-action" type="button" data-open-category-split hidden>Разделить раздел <span aria-hidden="true">→</span></button>
+        <footer class="category-modal-footer"><button class="category-delete-button" type="button" data-open-category-delete hidden>Удалить раздел</button><div class="category-modal-footer-right"><button type="button" class="secondary-button compact" data-close-category>Отмена</button><button type="submit" class="primary-button compact">Сохранить</button></div></footer>
       </form>
     </dialog>
 
-    <dialog class="confirm-dialog category-split-dialog" data-category-split-dialog>
-      <form class="settings-form category-split-form" data-category-split-form novalidate>
-        <p class="kicker">Безопасное разделение</p>
-        <h2>Разделить раздел</h2>
-        <p class="category-split-copy">Создайте два новых раздела и распределите каждое блюдо. Старый раздел не будет изменен, пока перенос не пройдет успешно.</p>
-        <label>Исходный раздел<select name="source_category_id" required data-split-source></select></label>
-        <div class="dual-field-grid category-split-targets">
-          <label>Первый новый раздел<input name="target_one_name_ru" maxlength="80" autocomplete="off" placeholder="Холодные закуски" required /></label>
-          <label>Второй новый раздел<input name="target_two_name_ru" maxlength="80" autocomplete="off" placeholder="Горячие закуски" required /></label>
+    <dialog class="confirm-dialog category-management-dialog category-split-dialog" data-category-split-dialog>
+      <form class="settings-form category-form" data-category-split-form>
+        <input type="hidden" name="category_id" />
+        <header class="category-modal-header"><div><p class="kicker">Разделение раздела</p><h2>Создать новый раздел</h2><p class="category-modal-lead">Текущий раздел: <strong data-category-split-source></strong></p></div><button class="category-modal-close" type="button" data-close-category-split aria-label="Закрыть">×</button></header>
+        <div class="category-form-fields">
+          <label>Название нового раздела (рус.)<input name="name_ru" maxlength="80" autocomplete="off" required /></label>
+          <label>Название (каз.)<input name="name_kz" maxlength="80" autocomplete="off" required /></label>
+          <label>Название (англ.)<input name="name_en" maxlength="80" autocomplete="off" required /></label>
         </div>
-        <div class="category-split-items" data-category-split-items></div>
-        <div><button type="button" class="secondary-button compact" data-close-category-split>Отмена</button><button type="submit" class="primary-button compact">Сохранить разделение</button></div>
+        <button class="secondary-button category-translate-action" type="button" data-category-auto-translate>Автоперевести с русского</button>
+        <fieldset class="category-dish-picker"><legend>Блюда для переноса</legend><p>Выберите позиции, которые будут перенесены в новый раздел.</p><div data-category-split-items></div></fieldset>
+        <p class="category-form-error" data-category-split-error role="alert"></p>
+        <footer class="category-modal-footer category-modal-footer--right"><div class="category-modal-footer-right"><button type="button" class="secondary-button compact" data-close-category-split>Отмена</button><button type="submit" class="primary-button compact">Разделить</button></div></footer>
       </form>
     </dialog>
 
@@ -401,18 +414,23 @@
       <div class="settings-form category-detail-panel" data-category-detail-root></div>
     </dialog>
 
-    <dialog class="confirm-dialog category-delete-dialog" data-category-delete-dialog>
-      <form class="settings-form category-delete-form" data-category-delete-form novalidate>
-        <input type="hidden" name="category_id" />
-        <p class="kicker">Удаление категории</p>
-        <h2 data-category-delete-title>Удалить категорию</h2>
-        <p class="category-delete-copy" data-category-delete-copy></p>
-        <label data-category-delete-target-field hidden>Куда перенести блюда<select name="target_category_id" data-category-delete-target></select></label>
-        <div><button type="button" class="secondary-button compact" data-close-category-delete>Отмена</button><button type="submit" class="danger-button">Удалить категорию</button></div>
-      </form>
+    <dialog class="confirm-dialog category-management-dialog category-delete-dialog" data-category-delete-dialog>
+      <section class="category-delete-content">
+        <header class="category-modal-header"><div><p class="kicker">Опасное действие</p><h2 data-category-delete-title>Удаление раздела</h2></div><button class="category-modal-close" type="button" data-close-category-delete aria-label="Закрыть">×</button></header>
+        <div class="category-delete-body" data-category-delete-body></div>
+        <footer class="category-modal-footer" data-category-delete-footer></footer>
+      </section>
+    </dialog>
+
+    <dialog class="stop-picker-dialog" data-stop-picker-dialog>
+      <section class="stop-picker-panel">
+        <header class="stop-picker-header"><div class="stop-picker-topbar"><button class="stop-picker-back" type="button" data-stop-picker-back hidden aria-label="Вернуться к разделам"><span aria-hidden="true">←</span> Назад</button><label class="stop-picker-search"><span aria-hidden="true">⌕</span><input type="search" data-stop-picker-search placeholder="Поиск по названию блюда" autocomplete="off" aria-label="Поиск блюд" /></label><button class="stop-picker-close" type="button" data-close-stop-picker aria-label="Закрыть">×</button></div><div class="stop-picker-heading"><p class="kicker">Доступность меню</p><h2>Добавить в стоп-лист</h2><p>Выберите раздел, затем добавьте нужные блюда.</p></div></header>
+        <div class="stop-picker-summary" data-stop-picker-summary></div><div class="stop-picker-items" data-stop-picker-items></div>
+      </section>
     </dialog>
 
     <dialog class="confirm-dialog" data-confirm-dialog><form method="dialog"><h2 data-confirm-title>Подтвердите действие</h2><p data-confirm-text></p><div><button value="cancel" class="secondary-button compact">Отмена</button><button value="confirm" class="danger-button">Подтвердить</button></div></form></dialog>
+    <div class="attention-modal" data-attention-modal role="dialog" aria-modal="true" aria-labelledby="attention-modal-title" hidden><button class="attention-modal__backdrop" type="button" data-close-attention-modal aria-label="Закрыть список проблем"></button><section class="attention-modal__panel"><header class="attention-modal__header"><div><p class="kicker">Контроль качества</p><h2 id="attention-modal-title" data-attention-modal-title></h2></div><button class="attention-modal__close" type="button" data-close-attention-modal aria-label="Закрыть">×</button></header><div class="attention-modal__body" data-attention-modal-body></div></section></div>
     <div class="toast-stack" data-toast-stack aria-live="polite"></div>
   </body>
 </html>

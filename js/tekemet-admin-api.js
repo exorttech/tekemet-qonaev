@@ -1,7 +1,8 @@
-(function initExortAdminApiConfig() {
+(function initTekemetAdminApiConfig() {
   const PROD_ENDPOINT = "/.netlify/functions/tekemet-admin";
+  const LOCAL_FALLBACK_ENDPOINT = "https://tekemetqonaev.com/.netlify/functions/tekemet-admin";
   const STORAGE_KEY = "tekemet.admin.apiUrl";
-  const META_SELECTOR = 'meta[name="exort-admin-api"]';
+  const META_SELECTOR = 'meta[name="tekemet-admin-api"]';
   const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
   function isLocalhost() {
@@ -20,7 +21,7 @@
   function getConfiguredEndpoint() {
     const metaValue = document.querySelector(META_SELECTOR)?.content || "";
     const storedValue = localStorage.getItem(STORAGE_KEY) || "";
-    const explicitValue = window.EXORT_ADMIN_API_URL || window.TEKEMET_ADMIN_API || metaValue || storedValue;
+    const explicitValue = window.TEKEMET_ADMIN_API || metaValue || storedValue;
     return normalizeEndpoint(explicitValue);
   }
 
@@ -38,37 +39,21 @@
   function resolveEndpoint() {
     const configured = getConfiguredEndpoint();
     if (configured) return configured;
-    return isLocalhost() ? "" : PROD_ENDPOINT;
+    return isLocalhost() ? LOCAL_FALLBACK_ENDPOINT : PROD_ENDPOINT;
   }
 
   const endpoint = resolveEndpoint();
   const configError = getEndpointError(endpoint);
 
-  window.EXORT_ADMIN_API_CONFIG = {
+  window.TEKEMET_ADMIN_API_CONFIG = {
     endpoint,
     configError,
     isLocalhost: isLocalhost(),
     productionEndpoint: PROD_ENDPOINT,
+    localFallbackEndpoint: LOCAL_FALLBACK_ENDPOINT,
     storageKey: STORAGE_KEY,
   };
 
   window.TEKEMET_ADMIN_API = endpoint;
 
-  window.TekemetAdminApi = {
-    endpoint,
-    configError,
-    async request(action, payload = {}) {
-      if (configError) throw new Error(configError);
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...payload }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.error) {
-        throw new Error(data.error || "Ошибка запроса Tekemet Admin");
-      }
-      return data;
-    },
-  };
 })();

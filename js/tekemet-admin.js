@@ -2,7 +2,6 @@ const DEFAULT_RESTAURANT_SLUG = "tekemet-qonaev";
 const ADMIN_API_URL = getAdminApiUrl();
 const sessionKeyPrefix = "tekemet-admin-session:";
 const themeStorageKey = "tekemet_admin_theme";
-const MAX_HOUR_VISITS = 50;
 
 const state = {
   restaurant: { slug: DEFAULT_RESTAURANT_SLUG, name: "Tekemet Qonaev", city: "Qonaev", brand: "#2563eb" },
@@ -14,11 +13,10 @@ const state = {
   loading: false,
   dirty: false,
   pendingConfirm: null,
-  analyticsRange: "today",
-  analyticsDrilldownDate: "",
-  analytics: null,
-  analyticsLoading: false,
   pendingActions: new Set(),
+  attentionIssue: "",
+  categoryOperationId: "",
+  stopPickerCategory: "all",
 };
 
 const el = {
@@ -40,7 +38,6 @@ const el = {
   dishGrid: document.querySelector("[data-dish-grid]"),
   categoryList: document.querySelector("[data-category-list]"),
   stopList: document.querySelector("[data-stop-list]"),
-  photoGrid: document.querySelector("[data-photo-grid]"),
   analyticsRoot: document.querySelector("[data-analytics-root]"),
   categoryFilter: document.querySelector("[data-category-filter]"),
   statusFilter: document.querySelector("[data-status-filter]"),
@@ -65,13 +62,22 @@ const el = {
   categorySplitDialog: document.querySelector("[data-category-split-dialog]"),
   categorySplitForm: document.querySelector("[data-category-split-form]"),
   categorySplitItems: document.querySelector("[data-category-split-items]"),
+  categorySplitSource: document.querySelector("[data-category-split-source]"),
+  categorySplitError: document.querySelector("[data-category-split-error]"),
   categoryDetailDialog: document.querySelector("[data-category-detail-dialog]"),
   categoryDetailRoot: document.querySelector("[data-category-detail-root]"),
   categoryDeleteDialog: document.querySelector("[data-category-delete-dialog]"),
-  categoryDeleteForm: document.querySelector("[data-category-delete-form]"),
   categoryDeleteTitle: document.querySelector("[data-category-delete-title]"),
-  categoryDeleteCopy: document.querySelector("[data-category-delete-copy]"),
-  categoryDeleteTarget: document.querySelector("[data-category-delete-target]"),
+  categoryDeleteBody: document.querySelector("[data-category-delete-body]"),
+  categoryDeleteFooter: document.querySelector("[data-category-delete-footer]"),
+  stopPickerDialog: document.querySelector("[data-stop-picker-dialog]"),
+  stopPickerSearch: document.querySelector("[data-stop-picker-search]"),
+  stopPickerBack: document.querySelector("[data-stop-picker-back]"),
+  stopPickerSummary: document.querySelector("[data-stop-picker-summary]"),
+  stopPickerItems: document.querySelector("[data-stop-picker-items]"),
+  attentionModal: document.querySelector("[data-attention-modal]"),
+  attentionModalTitle: document.querySelector("[data-attention-modal-title]"),
+  attentionModalBody: document.querySelector("[data-attention-modal-body]"),
   toasts: document.querySelector("[data-toast-stack]"),
 };
 
@@ -121,6 +127,7 @@ function shouldShowItemPrice(item) {
   return !isHotelBreakfastItem(item) && Number(item?.price || 0) > 0;
 }
 
+window.TekemetAdminBridge = { api: adminApi };
 init();
 
 function getRestaurantSlug() {
@@ -151,9 +158,7 @@ function sanitizeSlug(value) {
 }
 
 function getAdminApiUrl() {
-  const configured = window.EXORT_ADMIN_API_CONFIG?.endpoint || window.TEKEMET_ADMIN_API || "";
-  if (configured) return configured;
-  return isLocalAdminHost() ? "" : "/.netlify/functions/tekemet-admin";
+  return window.TEKEMET_ADMIN_API_CONFIG?.endpoint || window.TEKEMET_ADMIN_API || "";
 }
 
 function isLocalAdminHost() {
@@ -161,11 +166,11 @@ function isLocalAdminHost() {
 }
 
 function getAdminApiConfigError() {
-  const explicitError = window.EXORT_ADMIN_API_CONFIG?.configError || "";
+  const explicitError = window.TEKEMET_ADMIN_API_CONFIG?.configError || "";
   if (explicitError) return explicitError;
   if (ADMIN_API_URL) return "";
   if (isLocalAdminHost()) {
-    return "Для локального входа через Live Server укажите полный URL Netlify Function в window.EXORT_ADMIN_API_URL или localStorage key exort.admin.apiUrl.";
+    return "Для локального входа укажите полный URL Netlify Function в window.TEKEMET_ADMIN_API или localStorage key tekemet.admin.apiUrl.";
   }
   return "Адрес сервиса Exort Admin не настроен.";
 }
@@ -190,7 +195,7 @@ async function init() {
       navigate(requestedView || "overview");
       return;
     } catch (error) {
-      console.warn("[exort-admin] Stored session is invalid or expired.", error);
+      console.warn("[tekemet-admin] Stored session is invalid or expired.", error);
       sessionStorage.removeItem(sessionKeyPrefix + getRestaurantSlug());
       state.sessionToken = "";
       clearAdminHash("Unauthorized admin hash was cleared because there is no valid session.");
@@ -347,48 +352,14 @@ function navigate(view) {
   el.viewKicker.textContent = viewMeta[view][1];
   history.replaceState(null, "", `#${view}`);
   window.scrollTo({ top: 0, behavior: "smooth" });
-  if (view === "analytics") loadAnalytics();
-  if (view === "qr") renderQrWorkspace();
+  if (view === "analytics") {
+    window.TekemetAnalytics?.mount({ root: el.analyticsRoot });
+  }
+  if (view === "qr") {
+    window.TekemetQr?.mount({ root: document.querySelector("[data-qr-root]") });
+  }
 }
 
-function renderQrWorkspace() {
-  const root = document.querySelector("[data-qr-root]");
-  if (!root || root.dataset.ready) return;
-  root.dataset.ready = "true";
-  const menuUrl = getPublicMenuUrl();
-  root.innerHTML = `
-    <header class="qr-page-header"><div><p class="kicker">Гостевые ссылки</p><h2>QR-коды Tekemet</h2><p>Создавайте готовые к печати коды меню и Wi-Fi. Данные Wi-Fi остаются только в браузере.</p></div></header>
-    <div class="qr-layout">
-      <article class="qr-create-card"><div><p class="kicker">Публичное меню</p><h3>QR меню</h3></div><div class="qr-static-preview" data-menu-qr></div><div class="qr-source-url"><input readonly value="${escapeHtml(menuUrl)}"><button type="button" data-copy-menu-url>Копировать</button></div><button class="secondary-button compact" type="button" data-download-menu-qr>Скачать PNG</button></article>
-      <form class="qr-create-card" data-wifi-form><div><p class="kicker">Wi-Fi для гостей</p><h3>QR подключения</h3></div><label>Название сети<input name="ssid" maxlength="64" required></label><label>Защита<select name="security"><option value="WPA">WPA / WPA2</option><option value="WEP">WEP</option><option value="nopass">Без пароля</option></select></label><label data-wifi-password>Пароль<input name="password" type="password" maxlength="63"></label><label class="wifi-hidden-line"><input name="hidden" type="checkbox"> Скрытая сеть</label><button class="primary-button" type="submit">Создать Wi-Fi QR</button><div class="qr-static-preview" data-wifi-qr></div><button class="secondary-button compact" type="button" data-download-wifi-qr hidden>Скачать PNG</button></form>
-    </div>`;
-  const menuNode = root.querySelector("[data-menu-qr]");
-  if (window.QRCode) new window.QRCode(menuNode, { text: menuUrl, width: 196, height: 196, correctLevel: window.QRCode.CorrectLevel.H });
-  root.addEventListener("change", (event) => {
-    if (event.target.name !== "security") return;
-    const field = root.querySelector("[data-wifi-password]");
-    field.hidden = event.target.value === "nopass";
-    field.querySelector("input").disabled = field.hidden;
-  });
-  root.addEventListener("submit", (event) => {
-    if (!event.target.matches("[data-wifi-form]")) return;
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.target));
-    const escapeWifi = (value) => String(value || "").replace(/([\\;,:\"])/g, "\\$1");
-    const payload = `WIFI:T:${data.security};S:${escapeWifi(data.ssid)};${data.security === "nopass" ? "" : `P:${escapeWifi(data.password)};`}H:${data.hidden === "on" ? "true" : "false"};;`;
-    const node = root.querySelector("[data-wifi-qr]");
-    node.innerHTML = "";
-    if (window.QRCode) new window.QRCode(node, { text: payload, width: 196, height: 196, correctLevel: window.QRCode.CorrectLevel.H });
-    root.querySelector("[data-download-wifi-qr]").hidden = false;
-  });
-  root.addEventListener("click", async (event) => {
-    if (event.target.closest("[data-copy-menu-url]")) { await navigator.clipboard.writeText(menuUrl); toast("Ссылка скопирована", "success"); }
-    const selector = event.target.closest("[data-download-menu-qr]") ? "[data-menu-qr]" : event.target.closest("[data-download-wifi-qr]") ? "[data-wifi-qr]" : "";
-    if (!selector) return;
-    const preview = root.querySelector(selector); const canvas = preview.querySelector("canvas"); const image = preview.querySelector("img"); const url = canvas?.toDataURL("image/png") || image?.src;
-    if (url) { const link = document.createElement("a"); link.href = url; link.download = selector.includes("wifi") ? "tekemet-wifi.png" : "tekemet-menu.png"; link.click(); }
-  });
-}
 
 function getRequestedViewFromHash() {
   const rawHash = window.location.hash.replace(/^#/, "");
@@ -398,7 +369,7 @@ function getRequestedViewFromHash() {
 function clearAdminHash(reason = "") {
   if (!window.location.hash) return;
   if (reason) {
-    console.warn("[exort-admin]", reason, window.location.hash);
+    console.warn("[tekemet-admin]", reason, window.location.hash);
   }
   history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
 }
@@ -412,7 +383,6 @@ function renderAll() {
   renderDishes();
   renderCategories();
   renderStopList();
-  renderAnalytics();
 }
 
 
@@ -470,8 +440,6 @@ function renderCategories() {
         <button type="button" data-move-category="${category.id}" data-direction="-1" data-stop-row-click>↑</button>
         <button type="button" data-move-category="${category.id}" data-direction="1" data-stop-row-click>↓</button>
         <button type="button" data-edit-category="${category.id}" data-stop-row-click>Изменить</button>
-        <button type="button" data-split-category="${category.id}" data-stop-row-click>Разделить</button>
-        <button type="button" data-delete-category="${category.id}" data-stop-row-click>Удалить</button>
       </div>
     </article>`;
   }).join("");
@@ -494,222 +462,6 @@ function renderStopList() {
   </div>`;
 }
 
-function renderAnalytics() {
-  if (!el.analyticsRoot) return;
-  const analytics = state.analytics;
-  const range = state.analyticsRange || "today";
-  const rangeLabel = getAnalyticsRangeLabel(range);
-  const menuVisits = analytics ? getAnalyticsRangeValue(analytics.menuVisits, range) : 0;
-  const uniqueGuests = analytics ? getAnalyticsRangeValue(analytics.uniqueGuests, range) : 0;
-  const dishOpens = analytics ? getAnalyticsRangeValue(analytics.dishOpens, range) : 0;
-
-  el.analyticsRoot.innerHTML = `
-    <div class="analytics-toolbar">
-      <div>
-        <p class="kicker">Реальные данные</p>
-        <h2>Статистика меню</h2>
-      </div>
-      <div class="analytics-range" role="group" aria-label="Период аналитики">
-        ${[
-          ["today", "Сегодня"],
-          ["7d", "7 дней"],
-          ["30d", "30 дней"],
-          ["all", "Всё время"],
-        ].map(([value, label]) => `<button class="${range === value ? "is-active" : ""}" type="button" data-analytics-range="${value}">${label}</button>`).join("")}
-      </div>
-    </div>
-    ${state.analyticsLoading ? `<div class="analytics-loading">Загружаем аналитику...</div>` : ""}
-    <div class="analytics-summary-grid">
-      ${renderAnalyticsMetric("Посещения меню", menuVisits, rangeLabel, "menu_open")}
-      ${renderAnalyticsMetric("Сессии", uniqueGuests, rangeLabel, "session_id")}
-      ${renderAnalyticsMetric("Открытия блюд", dishOpens, rangeLabel, "dish_open")}
-      ${renderAnalyticsMetric("Среднее время просмотра", analytics?.averageViewTime || null, "", "view_time")}
-    </div>
-
-    <div class="analytics-insights-grid">
-      ${renderPopularDishes(analytics?.popularDishes || [])}
-      ${renderAnalyticsBreakdown("Языки", "Языки гостей", analytics?.languages || [], "language", "Пока нет данных")}
-      ${renderAnalyticsBreakdown("Устройства", "Устройства гостей", analytics?.devices || [], "device", "Пока нет данных")}
-    </div>
-
-    <div class="analytics-main-grid">
-      ${renderAnalyticsActivity(analytics, range)}
-    </div>
-
-    <div class="analytics-secondary-grid">
-      ${renderRecentEvents(analytics?.recentEvents || [])}
-    </div>
-  `;
-}
-
-async function loadAnalytics(force = false) {
-  if (!el.analyticsRoot || state.analyticsLoading) return;
-  if (state.analytics && !force) {
-    renderAnalytics();
-    return;
-  }
-
-  state.analyticsLoading = true;
-  renderAnalytics();
-  try {
-    const result = await adminApi("getAnalytics", { range: state.analyticsRange });
-    state.analytics = result.analytics || null;
-  } catch (error) {
-    console.warn("[exort-admin] analytics load failed", error);
-    toast(toFriendlyError(error.message) || "Не удалось загрузить аналитику", "danger");
-    state.analytics = null;
-  } finally {
-    state.analyticsLoading = false;
-    renderAnalytics();
-  }
-}
-
-function getAnalyticsRangeValue(group = {}, range = "7d") {
-  if (range === "today") return group.today || 0;
-  if (range === "30d") return group.last30Days || 0;
-  if (range === "year") return group.year || 0;
-  if (range === "all") return group.allTime || group.total || group.year || group.last30Days || 0;
-  return group.last7Days || 0;
-}
-
-
-function renderAnalyticsMetric(label, value, hint, code) {
-  const empty = value === null || value === undefined;
-  return `<article class="analytics-metric-card" data-analytics-code="${code}">
-    <span>${label}</span>
-    <strong>${empty ? "Нет данных" : formatAnalyticsNumber(value)}</strong>
-    ${hint ? `<small>${escapeHtml(hint)}</small>` : ""}
-  </article>`;
-}
-
-function renderPopularDishes(items) {
-  const maxOpens = Math.max(...items.map((item) => item.opens || 0), 0);
-  return `<article class="analytics-card popular-dishes-card">
-    <div class="analytics-card-head"><div><p class="kicker">Интерес гостей</p><h2>Популярные блюда</h2></div></div>
-    ${items.length ? `<div class="analytics-ranked-list">
-      ${items.map((item, index) => `<div class="analytics-ranked-row">
-        <span>${index + 1}</span>
-        <strong>${escapeHtml(getAnalyticsDishDisplayName(item))}</strong>
-        <em>${formatAnalyticsNumber(item.opens || 0)} ${pluralizeOpen(item.opens || 0)}</em>
-        <i style="--value:${getChartFillPercent(item.opens || 0, maxOpens)}%"></i>
-      </div>`).join("")}
-    </div>` : `<div class="analytics-empty"><strong>События появятся после первых открытий карточек</strong><p>Здесь будет рейтинг блюд по количеству просмотров.</p></div>`}
-  </article>`;
-}
-
-function renderAnalyticsActivity(analytics, range) {
-  const activeRange = range || "today";
-  const drilldown = state.analyticsDrilldownDate && activeRange !== "today"
-    ? analytics?.dayDetails?.[state.analyticsDrilldownDate]
-    : null;
-
-  if (drilldown) return renderDayDetail(drilldown, activeRange);
-  if (activeRange === "today") return renderVisitsByHour(analytics?.visitsByHour || []);
-  if (activeRange === "30d") return renderVisitsByWeek(analytics?.visitsByWeek || []);
-  if (activeRange === "year") {
-    return renderVisitsByMonth(analytics?.visitsByMonth || [], {
-      totalVisits: getAnalyticsRangeValue(analytics?.menuVisits, "year"),
-      totalUniqueGuests: getAnalyticsRangeValue(analytics?.uniqueGuests, "year"),
-      totalDishOpens: getAnalyticsRangeValue(analytics?.dishOpens, "year"),
-      busiestMonth: analytics?.allTimeSummary?.busiestMonth || "Нет данных",
-    }, activeRange);
-  }
-  if (activeRange === "all") return renderVisitsByMonth(analytics?.visitsByMonth || [], analytics?.allTimeSummary || {}, activeRange);
-  return renderVisitsByDay(analytics?.visitsByDay || []);
-}
-
-function renderDayDetail(detail, range) {
-  return `<article class="analytics-card analytics-card--wide">
-    <div class="analytics-card-head">
-      <div><p class="kicker">Детализация</p><h2>Статистика за ${escapeHtml(detail.label || detail.date || "день")}</h2></div>
-      <button class="secondary-button compact analytics-back-button" type="button" data-analytics-back="${range}">Назад к ${range === "30d" ? "месяцу" : "неделе"}</button>
-    </div>
-    ${renderHourChart(detail.hours || [])}
-  </article>`;
-}
-
-function renderHourChart(hours) {
-  const normalized = normalizeWorkingHours(hours);
-  const total = normalized.reduce((sum, entry) => sum + Number(entry.visits || 0), 0);
-  const max = Math.max(...normalized.map((entry) => entry.visits), 0);
-  const peak = normalized.reduce((best, entry) => (entry.visits > (best?.visits || -1) ? entry : best), null);
-  const scale = [50, 40, 30, 20, 10, 0];
-
-  return `<div class="analytics-activity-shell">
-    <div class="analytics-activity-summary">
-      <span class="analytics-activity-note">\u0420\u0430\u0431\u043e\u0447\u0438\u0439 \u0434\u0438\u0430\u043f\u0430\u0437\u043e\u043d: 07:00 - 24:00</span>
-      <strong class="analytics-activity-peak">${max ? `\u041f\u0438\u043a: ${escapeHtml(formatHourRange(peak.hour))} - ${formatVisitCount(peak.visits)}` : "\u041f\u0438\u043a: \u043d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445"}</strong>
-    </div>
-    <div class="analytics-activity-stage">
-      <div class="analytics-activity-scale" aria-hidden="true">
-        ${scale.map((value) => `<span>${value}</span>`).join("")}
-      </div>
-      <div class="analytics-activity-chart">
-        <div class="analytics-activity-plot">
-          <div class="analytics-activity-grid" aria-hidden="true">
-            ${scale.map(() => "<span></span>").join("")}
-          </div>
-          <div class="analytics-activity-bars" style="grid-template-columns:repeat(${normalized.length},minmax(0,1fr));" aria-label="\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0447\u0430\u0441\u0430\u043c">
-            ${normalized.map((entry, index) => {
-              const visits = Number(entry.visits || 0);
-              const percent = getWorkingHourShare(visits, total);
-              const isPeak = visits === max && max > 0;
-              const height = getWorkingHourBarHeight(visits);
-              return `<div class="analytics-activity-column">
-                <button
-                class="analytics-activity-bar ${isPeak ? "is-peak" : visits > 0 ? "is-active" : ""}"
-                type="button"
-                style="--bar-height:${height}%;"
-                aria-label="${escapeHtml(formatHourRange(entry.hour))}. ${formatVisitCount(visits)}. ${percent}% \u043e\u0442 \u043e\u0431\u0449\u0435\u0433\u043e \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u0430 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u0437\u0430 \u0434\u0435\u043d\u044c.">
-                <span class="analytics-activity-count" aria-hidden="true">${formatAnalyticsNumber(visits)}</span>
-                <span class="analytics-activity-bar-rail" aria-hidden="true">
-                  <span class="analytics-activity-bar-fill"></span>
-                </span>
-                <span class="analytics-activity-tooltip" role="presentation">
-                  <strong>${escapeHtml(formatHourRange(entry.hour))}</strong>
-                  <em>${formatVisitCount(visits)}</em>
-                  <b>${percent}% \u043e\u0442 \u0442\u0440\u0430\u0444\u0438\u043a\u0430 \u0434\u043d\u044f</b>
-                </span>
-                </button>
-                <span class="analytics-activity-hour" aria-hidden="true">${formatHourStart(entry.hour)}</span>
-              </div>`;
-            }).join("")}
-          </div>
-        </div>
-      </div>
-    </div>
-    ${max ? "" : `<p class="analytics-period-note">\u041f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u0437\u0430 \u0440\u0430\u0431\u043e\u0447\u0438\u0435 \u0447\u0430\u0441\u044b.</p>`}
-  </div>`;
-}
-
-function renderVisitsByHour(hours) {
-  return `<article class="analytics-card analytics-card--wide analytics-card--activity">
-    <div class="analytics-card-head analytics-card-head--activity">
-      <div>
-        <p class="kicker">\u0421\u0435\u0433\u043e\u0434\u043d\u044f</p>
-        <h2>\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u044f \u043f\u043e \u0432\u0440\u0435\u043c\u0435\u043d\u0438</h2>
-        <p class="analytics-card-description">\u0420\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u043f\u043e\u0441\u0435\u0449\u0435\u043d\u0438\u0439 \u043f\u043e \u0440\u0430\u0431\u043e\u0447\u0438\u043c \u0447\u0430\u0441\u0430\u043c \u0440\u0435\u0441\u0442\u043e\u0440\u0430\u043d\u0430. \u041f\u0438\u043a \u0438 \u0441\u043f\u0430\u0434 \u0432\u0438\u0434\u043d\u044b \u0441\u0440\u0430\u0437\u0443, \u0431\u0435\u0437 \u043f\u0435\u0440\u0435\u0433\u0440\u0443\u0436\u0435\u043d\u043d\u043e\u0439 \u043d\u043e\u0447\u043d\u043e\u0439 \u0437\u043e\u043d\u044b.</p>
-      </div>
-    </div>
-    ${renderHourChart(hours)}
-  </article>`;
-}
-
-function renderVisitsByDay(days) {
-  const normalized = normalizeLastDays(days, 7);
-  const max = Math.max(...normalized.map((entry) => entry.visits), 0);
-  return `<article class="analytics-card analytics-card--wide">
-    <div class="analytics-card-head"><div><p class="kicker">Неделя</p><h2>Посещения по дням недели</h2></div></div>
-    <div class="analytics-chart-shell analytics-chart-shell--days">
-      <div class="analytics-day-bars" style="--columns:${Math.max(1, normalized.length)}">
-        ${normalized.map((entry) => `<button class="analytics-day-bar" type="button" data-analytics-day="${escapeHtml(entry.date)}" title="${escapeHtml(formatDateTooltip(entry))}&#10;${formatVisitCount(entry.visits)}" aria-label="${escapeHtml(formatDateTooltip(entry))}. ${formatVisitCount(entry.visits)}" style="--height:${getChartFillPercent(entry.visits, max)}%">
-          <span></span><strong>${formatAnalyticsNumber(entry.visits)}</strong><em>${escapeHtml(formatShortDate(entry.date))}</em>
-        </button>`).join("")}
-      </div>
-      ${max ? "" : `<p class="analytics-period-note">Пока нет посещений за этот период.</p>`}
-    </div>
-  </article>`;
-}
 
 function renderMenuHeroPanel() {
   const panel = document.querySelector("[data-menu-hero-panel]");
@@ -750,299 +502,42 @@ async function handleMenuHeroFile(file) {
     }
   });
 }
-function renderVisitsByWeek(weeks) {
-  const normalizedWeeks = normalizeWeeks(weeks);
-  const allDays = normalizedWeeks.flatMap((week) => week.days || []);
-  const max = Math.max(...allDays.map((entry) => entry.visits), 0);
-  return `<article class="analytics-card analytics-card--wide">
-    <div class="analytics-card-head"><div><p class="kicker">Месяц</p><h2>Посещения по дням месяца</h2></div></div>
-    <div class="analytics-weeks">
-      ${normalizedWeeks.map((week) => `<section class="analytics-week">
-        <h3>${escapeHtml(week.weekLabel)}</h3>
-        <div class="analytics-week-days">
-          ${(week.days || []).map((entry) => `<button class="analytics-week-day" type="button" data-analytics-day="${escapeHtml(entry.date)}" title="${escapeHtml(week.weekLabel)} / ${escapeHtml(formatDateTooltip(entry))}&#10;${formatVisitCount(entry.visits)}" aria-label="${escapeHtml(week.weekLabel)}. ${escapeHtml(formatDateTooltip(entry))}. ${formatVisitCount(entry.visits)}">
-            <i style="--value:${getChartFillPercent(entry.visits, max)}%"></i>
-            <span>${escapeHtml(formatShortDate(entry.date))}</span>
-            <strong>${formatAnalyticsNumber(entry.visits)}</strong>
-          </button>`).join("")}
-        </div>
-      </section>`).join("")}
-    </div>
-    ${max ? "" : `<p class="analytics-period-note">Пока нет посещений за этот период.</p>`}
-  </article>`;
+
+function openStopPicker() {
+  if (!el.stopPickerDialog) return;
+  state.stopPickerCategory = "all";
+  el.stopPickerSearch.value = "";
+  renderStopPicker();
+  el.stopPickerDialog.showModal();
+  requestAnimationFrame(() => el.stopPickerSearch.focus());
 }
 
-function renderVisitsByMonth(months, summary, range = "year") {
-  const normalized = normalizeMonths(months);
-  const max = Math.max(...normalized.map((entry) => entry.visits), 0);
-  const title = range === "year" ? "Посещения за год" : "Посещения по месяцам";
-  const kicker = range === "year" ? "Год" : "Все время";
-  return `<article class="analytics-card analytics-card--wide">
-    <div class="analytics-card-head"><div><p class="kicker">${kicker}</p><h2>${title}</h2></div></div>
-    <div class="analytics-month-layout">
-      <div class="analytics-chart-shell analytics-chart-shell--months">
-        <div class="analytics-day-bars analytics-day-bars--months" style="--columns:${Math.max(1, normalized.length)}">
-          ${normalized.map((entry) => `<div class="analytics-day-bar analytics-day-bar--static" title="${escapeHtml(entry.fullLabel || entry.label)}&#10;${formatVisitCount(entry.visits)}" style="--height:${getChartFillPercent(entry.visits, max)}%">
-            <span></span><strong>${formatAnalyticsNumber(entry.visits)}</strong><em>${escapeHtml(entry.label)}</em>
-          </div>`).join("")}
-        </div>
-        ${max ? "" : `<p class="analytics-period-note">Пока нет посещений за этот период.</p>`}
-      </div>
-      <div class="analytics-all-summary">
-        <div><span>Всего посещений</span><strong>${formatAnalyticsNumber(summary.totalVisits || 0)}</strong></div>
-        <div><span>Сессии</span><strong>${formatAnalyticsNumber(summary.totalUniqueGuests || 0)}</strong></div>
-        <div><span>Открытия блюд</span><strong>${formatAnalyticsNumber(summary.totalDishOpens || 0)}</strong></div>
-        <div><span>Самый активный месяц</span><strong>${escapeHtml(summary.busiestMonth || "Нет данных")}</strong></div>
-      </div>
-    </div>
-  </article>`;
+function closeStopPicker() {
+  if (!el.stopPickerDialog?.open) return;
+  el.stopPickerDialog.close();
 }
 
-function renderAnalyticsBreakdown(kicker, title, rows, key, emptyText) {
-  if (key === "device") return renderDeviceBreakdown(rows);
-
-  return `<article class="analytics-card guest-languages-card">
-    <div class="analytics-card-head"><div><p class="kicker">${kicker}</p><h2>${title}</h2></div></div>
-    ${rows.length ? `<div class="analytics-breakdown-list">
-      ${rows.map((row) => `<div class="analytics-breakdown-row">
-        <span>${escapeHtml(String(row[key] || "").toUpperCase())}</span>
-        <div class="analytics-breakdown-value">
-          <strong>${row.percent || 0}%</strong>
-          <em>${formatAnalyticsNumber(row.count || 0)}</em>
-        </div>
-        <i style="--value:${row.percent || 0}%"></i>
-      </div>`).join("")}
-    </div>` : `<p class="analytics-muted">${emptyText}</p>`}
-  </article>`;
-}
-
-function renderDeviceBreakdown(rows) {
-  const byDevice = Object.fromEntries((rows || []).map((row) => [String(row.device || "").toLowerCase(), row]));
-  const devices = [
-    ["desktop", "Desktop"],
-    ["mobile", "Mobile"],
-    ["tablet", "Tablet"],
-  ].map(([key, label]) => ({
-    device: label,
-    count: byDevice[key]?.count || 0,
-    percent: byDevice[key]?.percent || 0,
-  }));
-
-  return `<article class="analytics-card analytics-card--compact guest-devices-card">
-    <div class="analytics-card-head"><div><p class="kicker">Устройства</p><h2>Устройства гостей</h2></div></div>
-    <div class="analytics-breakdown-list analytics-breakdown-list--compact">
-      ${devices.map((row) => `<div class="analytics-breakdown-row">
-        <span>${escapeHtml(row.device)}</span>
-        <div class="analytics-breakdown-value">
-          <strong>${row.percent}%</strong>
-          <em>${formatAnalyticsNumber(row.count)}</em>
-        </div>
-        <i style="--value:${row.percent}%"></i>
-      </div>`).join("")}
-    </div>
-  </article>`;
-}
-
-function renderRecentEvents(events) {
-  return `<article class="analytics-card analytics-card--span">
-    <div class="analytics-card-head"><div><p class="kicker">Лента</p><h2>Последние действия</h2></div></div>
-    ${events.length ? `<div class="analytics-event-list">
-      ${events.slice(0, 10).map((event) => `<div class="analytics-event-row"><span>${escapeHtml(event.displayTime || formatEventTime(event.createdAt))}</span><strong>${escapeHtml(normalizeEventLabel(event.label || "Событие меню"))}</strong></div>`).join("")}
-    </div>` : `<div class="analytics-empty analytics-empty--compact"><strong>Действий пока нет</strong><p>Список появится после подключения событий меню.</p></div>`}
-  </article>`;
-}
-
-function renderPopularDishesToday(items) {
-  const maxOpens = Math.max(...items.map((item) => item.opens || 0), 0);
-  return `<article class="analytics-card analytics-card--span">
-    <div class="analytics-card-head"><div><p class="kicker">Сегодня</p><h2>Самые популярные блюда сегодня</h2></div></div>
-    ${items.length ? `<div class="analytics-ranked-list analytics-ranked-list--compact">
-      ${items.slice(0, 5).map((item, index) => `<div class="analytics-ranked-row">
-        <span>${index + 1}</span>
-        <strong>${escapeHtml(getAnalyticsDishDisplayName(item))}</strong>
-        <em>${formatAnalyticsNumber(item.opens || 0)} ${pluralizeOpen(item.opens || 0)}</em>
-        <i style="--value:${getChartFillPercent(item.opens || 0, maxOpens)}%"></i>
-      </div>`).join("")}
-    </div>` : `<div class="analytics-empty analytics-empty--compact"><strong>Сегодня ещё нет данных</strong><p>Топ появится после открытий карточек блюд за сегодняшний день.</p></div>`}
-  </article>`;
-}
-
-function normalizeEventLabel(label = "") {
-  return String(label || "")
-    .replace("Открыли меню", "Открыли меню")
-    .replace("Открыли карточку", "Открыли карточку")
-    .replace("Сменили язык на", "Сменили язык на")
-    .replace("блюда", "блюда")
-    .replace("другой", "другой");
-}
-
-function getAnalyticsRangeLabel(range = "7d") {
-  if (range === "today") return "сегодня";
-  if (range === "30d") return "за месяц";
-  if (range === "year") return "за год";
-  if (range === "all") return "за все время";
-  return "за неделю";
-}
-
-function formatAnalyticsNumber(value) {
-  if (value === null || value === undefined) return "0";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return escapeHtml(String(value || ""));
-  return new Intl.NumberFormat("ru-RU").format(numeric);
-}
-
-function normalizeHours(hours) {
-  const byHour = Object.fromEntries((hours || []).map((entry) => [Number(entry.hour), Number(entry.visits || 0)]));
-  return Array.from({ length: 24 }, (_, hour) => ({
-    hour,
-    visits: byHour[hour] || 0,
-  }));
-}
-
-function normalizeWorkingHours(hours) {
-  return normalizeHours(hours).filter((entry) => entry.hour >= 7);
-}
-
-function getWorkingHourBarHeight(value) {
-  const numericValue = Number(value || 0);
-  if (!numericValue) return 0;
-  return Math.round(Math.min(numericValue / MAX_HOUR_VISITS, 1) * 100);
-}
-
-function getWorkingHourShare(value, total) {
-  const numericTotal = Number(total || 0);
-  if (!numericTotal) return 0;
-  return Math.round((Number(value || 0) / numericTotal) * 100);
-}
-
-function normalizeLastDays(days, count) {
-  const byDate = Object.fromEntries(
-    (days || [])
-      .filter((entry) => entry?.date)
-      .map((entry) => [entry.date, entry]),
-  );
-  const endKey = getAlmatyDateKey();
-  const startKey = shiftDateKeyClient(endKey, -(count - 1));
-  return Array.from({ length: count }, (_, index) => {
-    const date = shiftDateKeyClient(startKey, index);
-    const existing = byDate[date] || {};
-    return {
-      date,
-      label: existing.label || getWeekdayLabel(date),
-      fullLabel: existing.fullLabel || formatDateLabelClient(date),
-      shortLabel: existing.shortLabel || date.slice(8, 10),
-      visits: Number(existing.visits || 0),
-      isToday: date === endKey,
-    };
-  });
-}
-
-function normalizeWeeks(weeks) {
-  const sourceDays = (weeks || []).flatMap((week) => week.days || []);
-  const days = normalizeLastDays(sourceDays, 30);
-  const normalizedWeeks = [];
-  for (let index = 0; index < days.length; index += 7) {
-    normalizedWeeks.push({
-      weekLabel: index + 7 >= days.length ? "Остаток" : `Неделя ${normalizedWeeks.length + 1}`,
-      days: days.slice(index, index + 7),
-    });
+function renderStopPicker() {
+  if (!el.stopPickerItems) return;
+  const query = String(el.stopPickerSearch?.value || "").trim().toLowerCase();
+  const available = state.items.filter((item) => !item.is_stoplisted && !isTemporarilyUnavailable(item));
+  if (state.stopPickerCategory === "all" && !query) {
+    el.stopPickerBack.hidden = true;
+    el.stopPickerSummary.textContent = `Разделы · ${state.categories.length}`;
+    el.stopPickerItems.innerHTML = `<div class="stop-picker-section-table">${state.categories.map((category) => {
+      const count = available.filter((item) => item.category_id === category.id).length;
+      return `<button class="stop-picker-section-row" type="button" data-stop-picker-category="${escapeHtml(category.id)}"><span><strong>${escapeHtml(getCategoryDisplayName(category))}</strong><small>${formatPositionCount(count)}</small></span><b aria-hidden="true">→</b></button>`;
+    }).join("")}</div>`;
+    return;
   }
-  return normalizedWeeks;
-}
-
-function normalizeMonths(months) {
-  const labels = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-  const fullLabels = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-  const byMonth = Object.fromEntries((months || []).map((entry) => [Number(entry.month), entry]));
-  return labels.map((label, index) => {
-    const month = index + 1;
-    const existing = byMonth[month] || {};
-    return {
-      month,
-      label: existing.label || label,
-      fullLabel: existing.fullLabel || fullLabels[index],
-      visits: Number(existing.visits || 0),
-    };
+  el.stopPickerBack.hidden = false;
+  const category = state.categories.find((entry) => entry.id === state.stopPickerCategory);
+  const filtered = available.filter((item) => {
+    const matchesQuery = !query || [getItemDisplayName(item), getItemDisplayDescription(item)].join(" ").toLowerCase().includes(query);
+    return matchesQuery && (query || item.category_id === state.stopPickerCategory);
   });
-}
-
-function getChartFillPercent(value, max) {
-  const numericValue = Number(value || 0);
-  const numericMax = Number(max || 0);
-  if (!numericValue || !numericMax) return 0;
-  const scale = numericMax <= 2 ? 0.42 : numericMax <= 5 ? 0.64 : 1;
-  return Math.max(6, Math.round((numericValue / numericMax) * 100 * scale));
-}
-
-function pluralizeOpen(value) {
-  const number = Math.abs(Number(value || 0));
-  const mod10 = number % 10;
-  const mod100 = number % 100;
-  if (mod10 === 1 && mod100 !== 11) return "открытие";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "открытия";
-  return "открытий";
-}
-
-function formatEventTime(value) {
-  if (!value) return "";
-  return new Date(value).toLocaleTimeString("ru-RU", { timeZone: "Asia/Almaty", hour: "2-digit", minute: "2-digit" });
-}
-
-function getAlmatyDateKey(value = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Almaty",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(value);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
-}
-
-function shiftDateKeyClient(dateKey, offsetDays) {
-  const [year, month, day] = String(dateKey).split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + offsetDays));
-  return date.toISOString().slice(0, 10);
-}
-
-function getWeekdayLabel(dateKey) {
-  const [year, month, day] = String(dateKey).split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][date.getUTCDay()];
-}
-
-function formatDateLabelClient(dateKey) {
-  const [year, month, day] = String(dateKey).split("-").map(Number);
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
-}
-
-function formatHourRange(hour) {
-  const currentHour = Number(hour || 0);
-  const current = String(currentHour).padStart(2, "0");
-  const nextHour = currentHour + 1;
-  const next = String(nextHour === 24 ? 24 : nextHour % 24).padStart(2, "0");
-  return `${current}:00 - ${next}:00`;
-}
-
-function formatDateTooltip(entry = {}) {
-  const shortDate = formatShortDate(entry.date);
-  const weekday = entry.label || getWeekdayLabel(entry.date);
-  return weekday ? `${shortDate}, ${weekday}` : shortDate;
-}
-
-function formatShortDate(dateKey = "") {
-  const [, month, day] = String(dateKey).split("-");
-  if (!month || !day) return String(dateKey || "");
-  return `${day}.${month}`;
-}
-
-function formatVisitCount(count) {
-  const value = Number(count || 0);
-  const mod10 = value % 10;
-  const mod100 = value % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${formatAnalyticsNumber(value)} посещение`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${formatAnalyticsNumber(value)} посещения`;
-  return `${formatAnalyticsNumber(value)} посещений`;
+  el.stopPickerSummary.textContent = `${query ? `Поиск «${el.stopPickerSearch.value.trim()}»` : getCategoryDisplayName(category)} · ${formatPositionCount(filtered.length)}`;
+  el.stopPickerItems.innerHTML = filtered.length ? `<div class="stop-picker-dish-table">${filtered.map((item) => `<article class="stop-picker-dish-row"><div class="stop-picker-dish-visual">${item.image ? `<img src="${escapeHtml(item.image)}" alt="" />` : `<span>${escapeHtml(getItemDisplayName(item).charAt(0) || "?")}</span>`}</div><div class="stop-picker-dish-copy"><strong>${escapeHtml(getItemDisplayName(item))}</strong><small>${escapeHtml(categoryName(item.category_id) || "Без раздела")}${shouldShowItemPrice(item) ? ` · ${formatPrice(item.price, item.currency)}` : ""}</small></div><button class="secondary-button compact" type="button" data-stop-picker-add="${escapeHtml(item.id)}">Добавить</button></article>`).join("")}</div>` : `<div class="stop-picker-empty"><strong>${query ? "Ничего не найдено" : "Все блюда раздела уже в стоп-листе"}</strong><span>${query ? "Попробуйте изменить запрос." : "Вернитесь к разделам и выберите другой."}</span></div>`;
 }
 
 function visual(item) {
@@ -1055,7 +550,7 @@ function isTemporarilyUnavailable(item) {
 }
 
 function hasMissingTranslation(item) {
-  return !String(item.name_kz || "").trim() || !String(item.name_en || "").trim() || !String(item.description_kz || "").trim() || !String(item.description_en || "").trim();
+  return !String(item.name_ru || "").trim() || !String(item.name_kz || "").trim() || !String(item.name_en || "").trim();
 }
 
 function categoryName(id) {
@@ -1095,10 +590,6 @@ function setEditorStatus(isStoplisted = false) {
 function updateEditorStatusFromForm() {
   const value = el.itemForm?.querySelector('input[name="is_stoplisted"]:checked')?.value;
   setEditorStatus(value === "true");
-}
-
-function getActiveEditorLanguage() {
-  return document.querySelector("[data-lang-tab].is-active")?.dataset.langTab || "ru";
 }
 
 
@@ -1163,6 +654,8 @@ function addCategory() {
   el.categoryForm.reset();
   el.categoryForm.elements.id.value = "";
   el.categoryDialogTitle.textContent = "Новая категория";
+  el.categoryForm.querySelector("[data-open-category-split]").hidden = true;
+  el.categoryForm.querySelector("[data-open-category-delete]").hidden = true;
   el.categoryDialog.showModal();
   el.categoryForm.elements.name_ru.focus();
 }
@@ -1175,6 +668,8 @@ function editCategory(id) {
   el.categoryForm.elements.name_kz.value = category.name_kz || "";
   el.categoryForm.elements.name_en.value = category.name_en || "";
   el.categoryDialogTitle.textContent = "Редактирование категории";
+  el.categoryForm.querySelector("[data-open-category-split]").hidden = false;
+  el.categoryForm.querySelector("[data-open-category-delete]").hidden = false;
   el.categoryDialog.showModal();
   el.categoryForm.elements.name_ru.focus();
 }
@@ -1192,7 +687,11 @@ async function handleCategorySubmit(event) {
       sort_order: existing?.sort || (state.categories.length + 1) * 10,
       is_active: existing?.active ?? true,
     };
-    if (!payload.name_ru) return;
+    if (!payload.name_ru || !payload.name_kz || !payload.name_en) {
+      toast("Заполните названия на русском, казахском и английском", "danger");
+      el.categoryForm.querySelector("input:invalid")?.focus();
+      return;
+    }
 
     try {
       const result = await adminApi("saveCategory", { category: payload });
@@ -1247,48 +746,30 @@ function getCategoryItems(categoryId) {
 
 function renderCategorySplitItems() {
   if (!el.categorySplitForm || !el.categorySplitItems) return;
-  const sourceId = el.categorySplitForm.elements.source_category_id.value;
+  const sourceId = el.categorySplitForm.elements.category_id.value;
   const items = getCategoryItems(sourceId);
-  const firstName = el.categorySplitForm.elements.target_one_name_ru.value.trim() || "Первый раздел";
-  const secondName = el.categorySplitForm.elements.target_two_name_ru.value.trim() || "Второй раздел";
 
   if (!items.length) {
-    el.categorySplitItems.innerHTML = `<div class="empty-state category-split-empty"><h2>В разделе нет блюд</h2><p>Выберите раздел, в котором есть блюда для переноса.</p></div>`;
+    el.categorySplitItems.innerHTML = `<div class="empty-state category-split-empty"><h2>В разделе нет блюд</h2><p>Разделять можно только непустые разделы.</p></div>`;
     return;
   }
 
-  el.categorySplitItems.innerHTML = `
-    <div class="category-split-heading">
-      <strong>Распределите блюда</strong>
-      <span>${items.length} позиций</span>
-    </div>
-    <div class="category-split-list">
-      ${items.map((item) => `
-        <article class="category-split-item">
-          <div>
-            <strong>${escapeHtml(getItemDisplayName(item))}</strong>
-            <small>${escapeHtml([categoryName(item.category_id), shouldShowItemPrice(item) ? formatPrice(item.price, item.currency) : ""].filter(Boolean).join(" · "))}</small>
-          </div>
-          <div class="category-split-choice" role="radiogroup" aria-label="Новый раздел для ${escapeHtml(getItemDisplayName(item))}">
-            <label><input type="radio" name="split_item_${escapeHtml(item.id)}" value="one" required /><span>${escapeHtml(firstName)}</span></label>
-            <label><input type="radio" name="split_item_${escapeHtml(item.id)}" value="two" required /><span>${escapeHtml(secondName)}</span></label>
-          </div>
-        </article>
-      `).join("")}
-    </div>`;
+  el.categorySplitItems.innerHTML = items.map((item) => `<label class="category-dish-option"><input type="checkbox" name="item_ids" value="${escapeHtml(item.id)}" /><span><strong>${escapeHtml(getItemDisplayName(item))}</strong><small>${shouldShowItemPrice(item) ? escapeHtml(formatPrice(item.price, item.currency)) : "Без цены"}</small></span></label>`).join("");
 }
 
 function openCategorySplitDialog(categoryId) {
   if (!el.categorySplitDialog || !el.categorySplitForm) return;
   el.categorySplitForm.reset();
   const selectedId = state.categories.some((category) => category.id === categoryId) ? categoryId : state.categories[0]?.id || "";
-  el.categorySplitForm.elements.source_category_id.innerHTML = state.categories
-    .map((category) => `<option value="${escapeHtml(category.id)}">${escapeHtml(getCategoryDisplayName(category))}</option>`)
-    .join("");
-  el.categorySplitForm.elements.source_category_id.value = selectedId;
+  const category = state.categories.find((entry) => entry.id === selectedId);
+  state.categoryOperationId = selectedId;
+  el.categorySplitForm.elements.category_id.value = selectedId;
+  el.categorySplitSource.textContent = getCategoryDisplayName(category);
+  el.categorySplitError.textContent = "";
+  if (el.categoryDialog.open) el.categoryDialog.close();
   renderCategorySplitItems();
   el.categorySplitDialog.showModal();
-  el.categorySplitForm.elements.target_one_name_ru.focus();
+  el.categorySplitForm.elements.name_ru.focus();
 }
 
 function renderCategoryDetail(categoryId) {
@@ -1348,47 +829,28 @@ async function handleCategorySplitSubmit(event) {
   event.preventDefault();
   if (!el.categorySplitForm) return;
   await runOnce("split-category", event.submitter, "Разделяем...", async () => {
-    const form = el.categorySplitForm;
-    const sourceCategoryId = form.elements.source_category_id.value;
-    const oneName = form.elements.target_one_name_ru.value.trim();
-    const twoName = form.elements.target_two_name_ru.value.trim();
-    const items = getCategoryItems(sourceCategoryId);
-
-    if (!sourceCategoryId) return toast("Выберите исходный раздел", "danger");
-    if (!oneName || !twoName) return toast("Укажите названия двух новых разделов", "danger");
-    if (oneName.toLowerCase() === twoName.toLowerCase()) return toast("Названия новых разделов должны отличаться", "danger");
-    if (!items.length) return toast("В исходном разделе нет блюд для переноса", "danger");
-
-    const assignments = [];
-    for (const item of items) {
-      const selected = form.querySelector(`input[name="split_item_${escapeCssIdentifier(item.id)}"]:checked`);
-      if (!selected) {
-        toast("Распределите все блюда по новым разделам", "danger");
-        return;
-      }
-      assignments.push({ itemId: item.id, targetClientId: selected.value });
-    }
-
-    if (!assignments.some((entry) => entry.targetClientId === "one") || !assignments.some((entry) => entry.targetClientId === "two")) {
-      toast("В каждом новом разделе должно быть хотя бы одно блюдо", "danger");
-      return;
-    }
+    const data = new FormData(el.categorySplitForm);
+    const categoryId = String(data.get("category_id") || "");
+    const nameRu = String(data.get("name_ru") || "").trim();
+    const nameKz = String(data.get("name_kz") || "").trim();
+    const nameEn = String(data.get("name_en") || "").trim();
+    const itemIds = [...new Set(data.getAll("item_ids").map(String))];
+    const sourceItems = getCategoryItems(categoryId);
+    el.categorySplitError.textContent = "";
+    if (!nameRu || !nameKz || !nameEn) { el.categorySplitError.textContent = "Заполните название нового раздела на всех трёх языках."; return; }
+    if (!itemIds.length) { el.categorySplitError.textContent = "Выберите хотя бы одно блюдо для переноса."; return; }
+    if (itemIds.length >= sourceItems.length) { el.categorySplitError.textContent = "Нельзя перенести все блюда: исходный раздел должен остаться непустым."; return; }
 
     try {
       const result = await adminApi("splitCategory", {
-        split: {
-          sourceCategoryId,
-          targets: [
-            { clientId: "one", name_ru: oneName },
-            { clientId: "two", name_ru: twoName },
-          ],
-          assignments,
-        },
+        categoryId,
+        itemIds,
+        category: { name_ru: nameRu, name_kz: nameKz, name_en: nameEn },
       });
       applyAdminData(result);
       el.categorySplitDialog.close();
       closeCategoryDetail();
-      toast("Раздел успешно разделен", "success");
+      toast(`Раздел создан, перенесено: ${formatPositionCount(itemIds.length)}`, "success");
       navigate("categories");
     } catch (error) {
       toast(error.message || "Не удалось разделить раздел", "danger");
@@ -1397,53 +859,90 @@ async function handleCategorySplitSubmit(event) {
 }
 
 function openCategoryDeleteDialog(categoryId) {
-  if (!el.categoryDeleteDialog || !el.categoryDeleteForm) return;
-  const category = state.categories.find((entry) => entry.id === categoryId);
-  if (!category) return;
-  const items = getCategoryItems(categoryId);
-  const alternatives = state.categories.filter((entry) => entry.id !== categoryId);
-  el.categoryDeleteForm.reset();
-  el.categoryDeleteForm.elements.category_id.value = categoryId;
-  el.categoryDeleteTitle.textContent = `Удалить категорию «${getCategoryDisplayName(category)}»`;
-  const targetField = el.categoryDeleteForm.querySelector("[data-category-delete-target-field]");
-
-  if (items.length) {
-    el.categoryDeleteCopy.textContent = `В категории ${formatPositionCount(items.length)}. Перед удалением выберите раздел, куда перенести блюда.`;
-    targetField.hidden = false;
-    el.categoryDeleteTarget.required = true;
-    el.categoryDeleteTarget.innerHTML = `<option value="">Выберите раздел</option>${alternatives.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getCategoryDisplayName(entry))}</option>`).join("")}`;
-  } else {
-    el.categoryDeleteCopy.textContent = "Категория пустая. После удаления она больше не будет отображаться в админке.";
-    targetField.hidden = true;
-    el.categoryDeleteTarget.required = false;
-    el.categoryDeleteTarget.innerHTML = "";
-  }
-
+  if (!el.categoryDeleteDialog) return;
+  if (!state.categories.some((entry) => entry.id === categoryId)) return;
+  state.categoryOperationId = categoryId;
+  if (el.categoryDialog?.open) el.categoryDialog.close();
+  renderCategoryDelete("initial");
   el.categoryDeleteDialog.showModal();
 }
 
-async function handleCategoryDeleteSubmit(event) {
-  event.preventDefault();
-  const submitter = event.submitter;
-  await runOnce("delete-category", submitter, "Удаляем...", async () => {
-    const categoryId = el.categoryDeleteForm.elements.category_id.value;
-    const targetCategoryId = el.categoryDeleteForm.elements.target_category_id?.value || "";
-    const items = getCategoryItems(categoryId);
-    if (items.length && !targetCategoryId) {
-      toast("Выберите раздел для переноса блюд", "danger");
-      el.categoryDeleteTarget.focus();
-      return;
-    }
+function renderCategoryDelete(stage = "initial") {
+  const category = state.categories.find((entry) => entry.id === state.categoryOperationId);
+  if (!category || !el.categoryDeleteBody || !el.categoryDeleteFooter) return;
+  const items = getCategoryItems(category.id);
+  const categoryNameText = getCategoryDisplayName(category);
+  const otherCategories = state.categories.filter((entry) => entry.id !== category.id);
+  el.categoryDeleteTitle.textContent = `Удалить раздел «${categoryNameText}»`;
 
+  if (!items.length) {
+    el.categoryDeleteBody.innerHTML = `<p>Удалить раздел «${escapeHtml(categoryNameText)}»? Это действие нельзя отменить.</p>`;
+    el.categoryDeleteFooter.innerHTML = `<span></span><div class="category-modal-footer-right"><button type="button" class="secondary-button compact" data-close-category-delete>Отмена</button><button type="button" class="category-delete-button" data-category-delete-confirm="empty">Удалить раздел</button></div>`;
+    return;
+  }
+
+  if (stage === "move") {
+    el.categoryDeleteBody.innerHTML = `<p>Выберите раздел, в который будут перенесены ${formatPositionCount(items.length)}.</p><label class="category-delete-select">Новый раздел<select data-category-delete-target><option value="">Выберите раздел</option>${otherCategories.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(getCategoryDisplayName(entry))}</option>`).join("")}</select></label>`;
+    el.categoryDeleteFooter.innerHTML = `<button type="button" class="secondary-button compact" data-category-delete-stage="initial">Назад</button><div class="category-modal-footer-right"><button type="button" class="secondary-button compact" data-close-category-delete>Отмена</button><button type="button" class="primary-button compact" data-category-delete-confirm="move" ${otherCategories.length ? "" : "disabled"}>Перенести и удалить</button></div>`;
+    return;
+  }
+
+  if (stage === "cascade") {
+    el.categoryDeleteBody.innerHTML = `<p class="category-delete-warning">Будут удалены раздел и ${formatPositionCount(items.length)}. Это действие нельзя отменить.</p>`;
+    el.categoryDeleteFooter.innerHTML = `<button type="button" class="secondary-button compact" data-category-delete-stage="initial">Назад</button><div class="category-modal-footer-right"><button type="button" class="secondary-button compact" data-close-category-delete>Отмена</button><button type="button" class="category-delete-button" data-category-delete-confirm="cascade">Удалить всё</button></div>`;
+    return;
+  }
+
+  el.categoryDeleteBody.innerHTML = `<p>В разделе «${escapeHtml(categoryNameText)}» находится ${formatPositionCount(items.length)}. Что сделать с ними?</p><div class="category-delete-options"><button type="button" class="secondary-button" data-category-delete-stage="move" ${otherCategories.length ? "" : "disabled"}>Перенести блюда в другой раздел</button><button type="button" class="category-delete-button" data-category-delete-stage="cascade">Удалить раздел вместе с блюдами</button></div>`;
+  el.categoryDeleteFooter.innerHTML = `<span></span><button type="button" class="secondary-button compact" data-close-category-delete>Отмена</button>`;
+}
+
+async function executeCategoryDelete(mode, button = null) {
+  const categoryId = state.categoryOperationId;
+  const targetCategoryId = mode === "move" ? el.categoryDeleteBody.querySelector("[data-category-delete-target]")?.value || "" : "";
+  if (mode === "move" && !targetCategoryId) {
+    toast("Выберите раздел для переноса блюд", "danger");
+    el.categoryDeleteBody.querySelector("[data-category-delete-target]")?.focus();
+    return;
+  }
+
+  await runOnce("delete-category", button, "Удаляем...", async () => {
     try {
-      const result = await adminApi("deleteCategory", { categoryId, targetCategoryId });
+      const result = await adminApi("deleteCategory", { categoryId, mode, targetCategoryId });
       applyAdminData(result);
       el.categoryDeleteDialog.close();
+      state.categoryOperationId = "";
       closeCategoryDetail();
-      toast(items.length ? "Категория удалена, блюда перенесены" : "Категория удалена", "success");
+      toast(mode === "move" ? "Блюда перенесены, раздел удалён" : "Раздел удалён", "success");
       navigate("categories");
     } catch (error) {
-      toast(toFriendlyError(error.message) || "Не удалось удалить категорию", "danger");
+      toast(toFriendlyError(error.message) || "Не удалось удалить раздел", "danger");
+      renderCategoryDelete(mode === "cascade" ? "cascade" : mode === "move" ? "move" : "initial");
+    }
+  });
+}
+
+async function translateCategoryNames(button) {
+  const form = button.closest("form");
+  const nameRu = form?.elements.name_ru?.value.trim();
+  if (!form || !nameRu || button.disabled) {
+    if (!nameRu) toast("Сначала заполните русское название", "danger");
+    form?.elements.name_ru?.focus();
+    return;
+  }
+
+  await runOnce(`translate-category:${form.dataset.categoryForm ? "edit" : "split"}`, button, "Переводим…", async () => {
+    try {
+      const [nameEn, nameKz] = await Promise.all([
+        requestGoogleTranslation(nameRu, "en"),
+        requestGoogleTranslation(nameRu, "kk"),
+      ]);
+      form.elements.name_en.value = nameEn;
+      form.elements.name_kz.value = nameKz;
+      toast("Названия переведены", "success");
+    } catch (error) {
+      console.warn("[tekemet-admin] category translation failed", error);
+      toast("Автоперевод пока недоступен. Заполните названия вручную.", "danger");
     }
   });
 }
@@ -1506,6 +1005,8 @@ function handleDocumentClick(event) {
   const stock = stockButton?.dataset.toggleStock;
   const edit = event.target.closest("[data-edit-item]")?.dataset.editItem;
   const attention = event.target.closest("[data-attention-view]")?.dataset.attentionView;
+  const attentionIssue = event.target.closest("[data-attention-issue]")?.dataset.attentionIssue;
+  const attentionOpenItem = event.target.closest("[data-attention-open-item]")?.dataset.attentionOpenItem;
   const toggleCatButton = event.target.closest("[data-toggle-category]");
   const toggleCat = toggleCatButton?.dataset.toggleCategory;
   const editCat = event.target.closest("[data-edit-category]")?.dataset.editCategory;
@@ -1513,41 +1014,46 @@ function handleDocumentClick(event) {
   const deleteCat = event.target.closest("[data-delete-category]")?.dataset.deleteCategory;
   const move = event.target.closest("[data-move-category]");
   const openCategory = event.target.closest("[data-open-category]")?.dataset.openCategory;
-  const analyticsRange = event.target.closest("[data-analytics-range]")?.dataset.analyticsRange;
-  const analyticsDay = event.target.closest("[data-analytics-day]")?.dataset.analyticsDay;
-  const analyticsBack = event.target.closest("[data-analytics-back]")?.dataset.analyticsBack;
+  const stopPickerCategory = event.target.closest("[data-stop-picker-category]")?.dataset.stopPickerCategory;
+  const stopPickerAdd = event.target.closest("[data-stop-picker-add]")?.dataset.stopPickerAdd;
+  const categoryTranslateButton = event.target.closest("[data-category-auto-translate]");
+  const categoryDeleteStage = event.target.closest("[data-category-delete-stage]")?.dataset.categoryDeleteStage;
+  const categoryDeleteConfirmButton = event.target.closest("[data-category-delete-confirm]");
+  const openCategorySplitButton = event.target.closest("[data-open-category-split]");
+  const openCategoryDeleteButton = event.target.closest("[data-open-category-delete]");
 
   if (nav) navigate(nav.dataset.nav);
   if (event.target.closest("[data-close-category-detail]")) closeCategoryDetail();
-  if (analyticsRange) {
-    state.analyticsRange = analyticsRange;
-    state.analyticsDrilldownDate = "";
-    state.analytics = null;
-    loadAnalytics(true);
-  }
-  if (analyticsDay) {
-    state.analyticsDrilldownDate = analyticsDay;
-    renderAnalytics();
-  }
-  if (analyticsBack) {
-    state.analyticsDrilldownDate = "";
-    renderAnalytics();
-  }
   if (action === "add-item") openItemDrawer();
   if (action === "add-category") addCategory();
   if (action === "open-stop-filter") openStopFilter();
+  if (event.target.closest("[data-open-stop-picker]")) openStopPicker();
+  if (event.target.closest("[data-close-stop-picker]")) closeStopPicker();
+  if (event.target.closest("[data-stop-picker-back]")) { state.stopPickerCategory = "all"; el.stopPickerSearch.value = ""; renderStopPicker(); }
+  if (stopPickerCategory) { state.stopPickerCategory = stopPickerCategory; renderStopPicker(); }
+  if (stopPickerAdd) toggleStock(stopPickerAdd, event.target.closest("[data-stop-picker-add]"));
   if (stock) toggleStock(stock, stockButton);
   if (edit) {
     closeCategoryDetail();
     openItemDrawer(edit);
   }
   if (attention) navigate(attention);
+  if (attentionIssue) openAttentionPopup(attentionIssue);
+  if (event.target.closest("[data-attention-more]")) openAttentionSummary();
+  if (event.target.closest("[data-close-attention-modal]")) closeAttentionPopup();
+  if (attentionOpenItem) { closeAttentionPopup(); openItemDrawer(attentionOpenItem); }
   if (event.target.closest("[data-logout]")) logout();
   if (event.target.closest("[data-close-drawer]")) closeDrawer();
   if (toggleCat) toggleCategory(toggleCat, toggleCatButton);
   if (editCat) editCategory(editCat);
   if (splitCat) openCategorySplitDialog(splitCat);
   if (deleteCat) openCategoryDeleteDialog(deleteCat);
+  if (openCategorySplitButton) openCategorySplitDialog(el.categoryForm.elements.id.value);
+  if (openCategoryDeleteButton) openCategoryDeleteDialog(el.categoryForm.elements.id.value);
+  if (categoryTranslateButton) translateCategoryNames(categoryTranslateButton);
+  if (categoryDeleteStage) renderCategoryDelete(categoryDeleteStage);
+  if (categoryDeleteConfirmButton) executeCategoryDelete(categoryDeleteConfirmButton.dataset.categoryDeleteConfirm, categoryDeleteConfirmButton);
+  if (event.target.closest("[data-close-category-delete]")) el.categoryDeleteDialog?.close();
   if (move) moveCategory(move.dataset.moveCategory, Number(move.dataset.direction), move);
   if (event.target.closest("[data-remove-editor-image]")) removeEditorImage(event.target.closest("[data-remove-editor-image]"));
   if (event.target.closest("[data-translate-current-item]")) translateCurrentItem();
@@ -1643,12 +1149,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function escapeCssIdentifier(value) {
-  if (window.CSS && typeof window.CSS.escape === "function") {
-    return window.CSS.escape(String(value));
-  }
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
-}
 
 function firstFilledValue(...values) {
   for (const value of values) {
@@ -1686,10 +1186,6 @@ function isMenuHeroItem(item) {
     || contentKey === "hero"
     || sectionKey === "hero"
     || titleKey === "menu-hero";
-}
-
-function formatHourStart(hour) {
-  return `${String(Number(hour || 0)).padStart(2, "0")}:00`;
 }
 
 function getItemDisplayName(item) {
@@ -1758,34 +1254,7 @@ function getCategoryDisplayName(category) {
     category?.id,
   ) || "\u0411\u0435\u0437 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438";
 }
-function getAnalyticsDishDisplayName(item) {
-  return firstFilledValue(
-    item?.title_ru,
-    item?.name_ru,
-    item?.title_kk,
-    item?.name_kz,
-    item?.title_en,
-    item?.name_en,
-    item?.title,
-    item?.name,
-    item?.content_key,
-    item?.id,
-  ) || "Блюдо";
-}
 
-function getNextMidnightIso() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  date.setHours(0, 0, 0, 0);
-  return date.toISOString();
-}
-
-function toDatetimeLocal(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (number) => String(number).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 function applyTheme(theme) {
   const nextTheme = theme === "dark" ? "dark" : "light";
@@ -1907,21 +1376,71 @@ function renderMetrics() {
 }
 
 function renderAttention() {
-  const issues = [
-    { name: "Нет фото", count: state.items.filter((item) => !item.image).length, view: "menu", type: "issue" },
-    { name: "Нет перевода", count: state.items.filter((item) => hasMissingTranslation(item)).length, view: "menu", type: "issue" },
-    { name: "Стоп-лист", count: state.items.filter((item) => item.is_stoplisted || isTemporarilyUnavailable(item)).length, view: "stoplist", type: "neutral" },
+  const issues = getAttentionIssues();
+  const total = new Set(issues.flatMap((issue) => issue.items.map((item) => item.id))).size;
+  el.attentionCount.textContent = total ? formatPositionCount(total) : "Все хорошо";
+  el.attentionList.innerHTML = issues.slice(0, 2).map((issue) => {
+    const status = getAttentionStatus(issue.items.length, issue.type);
+    return `<button class="attention-item attention-item--${status.className}" type="button" data-attention-issue="${issue.key}"><i></i><span class="attention-copy"><strong>${issue.name}</strong><small>${issue.items.length ? issue.description : issue.emptyDescription}</small></span><span class="attention-result"><b>${formatPositionCount(issue.items.length)}</b><em>${status.label}</em></span></button>`;
+  }).join("") + `<div class="attention-more"><button type="button" data-attention-more>Подробнее <span aria-hidden="true">→</span></button></div>`;
+}
+
+function getAttentionIssues() {
+  return [
+    { key: "photo", name: "Без фотографии", type: "issue", description: "Есть позиции без фотографии", emptyDescription: "Все фотографии загружены", items: state.items.filter((item) => !item.image) },
+    { key: "translation", name: "Без перевода", type: "issue", description: "Есть позиции с незаполненными переводами", emptyDescription: "Все переводы заполнены", items: state.items.filter(hasMissingTranslation) },
+    { key: "category", name: "Без категории", type: "issue", description: "Есть позиции без раздела", emptyDescription: "Все позиции распределены", items: state.items.filter((item) => !item.category_id) },
+    { key: "inactive", name: "Неактивные", type: "neutral", description: "Есть неактивные позиции", emptyDescription: "Все позиции активны", items: state.items.filter((item) => !item.is_active) },
+    { key: "stop", name: "Стоп-лист", type: "neutral", description: "Есть позиции в стоп-листе", emptyDescription: "Стоп-лист пуст", items: state.items.filter((item) => item.is_stoplisted || isTemporarilyUnavailable(item)) },
   ];
-  const total = issues.reduce((sum, issue) => sum + issue.count, 0);
-  el.attentionCount.textContent = total ? `${formatPositionCount(total)}` : "Все хорошо";
-  el.attentionList.innerHTML = issues.map((issue) => {
-    const status = getAttentionStatus(issue.count, issue.type);
-    return `<button class="attention-item attention-item--${status.className}" type="button" data-attention-view="${issue.view}">
-      <i></i>
-      <span class="attention-copy"><strong>${issue.name}</strong><small>${status.description}</small></span>
-      <span class="attention-result"><b>${formatPositionCount(issue.count)}</b><em>${status.label}</em></span>
-    </button>`;
-  }).join("");
+}
+
+function getMissingTranslationLanguages(item) {
+  return [
+    ["name_ru", "Русский"],
+    ["name_kz", "Казахский"],
+    ["name_en", "Английский"],
+  ].filter(([field]) => !String(item?.[field] || "").trim()).map(([, label]) => label);
+}
+
+function openAttentionPopup(key) {
+  const issue = getAttentionIssues().find((entry) => entry.key === key);
+  if (!issue || !el.attentionModal) return;
+  state.attentionIssue = key;
+  el.attentionModalTitle.textContent = `${issue.name} — ${formatPositionCount(issue.items.length)}`;
+  el.attentionModalBody.innerHTML = renderAttentionTable(issue);
+  el.attentionModal.hidden = false;
+  document.body.classList.add("attention-modal-open");
+  requestAnimationFrame(() => el.attentionModal.querySelector(".attention-modal__close")?.focus());
+}
+
+function openAttentionSummary() {
+  const issues = getAttentionIssues();
+  const total = new Set(issues.flatMap((issue) => issue.items.map((item) => item.id))).size;
+  state.attentionIssue = "all";
+  el.attentionModalTitle.textContent = `Требует внимания — ${formatPositionCount(total)}`;
+  el.attentionModalBody.innerHTML = `<div class="attention-modal__table-scroll"><table class="attention-modal__table attention-modal__table--summary"><thead><tr><th>Проблема</th><th>Количество</th><th>Действие</th></tr></thead><tbody>${issues.map((issue) => `<tr><th>${escapeHtml(issue.name)}</th><td>${formatPositionCount(issue.items.length)}</td><td><button type="button" data-attention-issue="${issue.key}">Открыть</button></td></tr>`).join("")}</tbody></table></div>`;
+  el.attentionModal.hidden = false;
+  document.body.classList.add("attention-modal-open");
+  requestAnimationFrame(() => el.attentionModal.querySelector(".attention-modal__close")?.focus());
+}
+
+function closeAttentionPopup() {
+  if (!el.attentionModal || el.attentionModal.hidden) return;
+  const key = state.attentionIssue;
+  el.attentionModal.hidden = true;
+  document.body.classList.remove("attention-modal-open");
+  state.attentionIssue = "";
+  requestAnimationFrame(() => el.attentionList.querySelector(key === "all" ? "[data-attention-more]" : `[data-attention-issue="${key}"]`)?.focus());
+}
+
+function renderAttentionTable(issue) {
+  const rows = issue.items.length ? issue.items.map((item) => {
+    const itemId = escapeHtml(item.id);
+    const itemName = escapeHtml(getItemDisplayName(item));
+    return `<tr tabindex="0" data-attention-open-item="${itemId}" aria-label="Открыть блюдо ${itemName}"><th scope="row">${itemName}</th><td>${escapeHtml(item.category_id ? categoryName(item.category_id) : "Не указан")}</td><td>${escapeHtml(issue.key === "translation" ? getMissingTranslationLanguages(item).join(", ") : issue.key === "photo" ? "Нет фотографии" : issue.key === "category" ? "Категория не указана" : issue.key === "inactive" ? "Неактивно" : "В стоп-листе")}</td><td><button type="button">Открыть</button></td></tr>`;
+  }).join("") : `<tr><td class="attention-modal__empty" colspan="4">Проблемных позиций нет.</td></tr>`;
+  return `<div class="attention-modal__table-scroll"><table class="attention-modal__table"><thead><tr><th>Блюдо</th><th>Раздел</th><th>${issue.key === "translation" ? "Каких переводов не хватает" : "Проблема"}</th><th>Действие</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderDishes() {
@@ -1983,7 +1502,7 @@ function formatPositionCount(count) {
 async function adminApi(action, payload = {}) {
   const configError = getAdminApiConfigError();
   if (configError) {
-    console.warn("[exort-admin] API config error.", {
+    console.warn("[tekemet-admin] API config error.", {
       action,
       endpoint: ADMIN_API_URL || "(empty)",
       configError,
@@ -2006,12 +1525,11 @@ async function adminApi(action, payload = {}) {
       body: JSON.stringify(requestPayload),
     });
   } catch (error) {
-    console.error("[exort-admin] API request failed.", {
+    console.error("[tekemet-admin] API request failed.", {
       action,
       url: ADMIN_API_URL,
       method: "POST",
       error: error?.message || String(error),
-      payload: requestPayload,
     });
     throw new Error("Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort.");
   }
@@ -2026,26 +1544,16 @@ async function adminApi(action, payload = {}) {
 
   if (!response.ok || data?.error) {
     const message = data?.error || `Admin API error ${response.status}`;
-    console.error("[exort-admin] API rejected request.", {
+    console.error("[tekemet-admin] API rejected request.", {
       action,
       url: ADMIN_API_URL,
       method: "POST",
       status: response.status,
       statusText: response.statusText,
-      responseText: rawText,
-      data,
+      error: message,
     });
 
     if ([404, 405, 500, 502, 503].includes(response.status)) {
-      console.error("[exort-admin] API endpoint is unavailable.", {
-        action,
-        url: ADMIN_API_URL,
-        method: "POST",
-        status: response.status,
-        statusText: response.statusText,
-        responseText: rawText,
-        data,
-      });
       if (response.status === 405 && isLocalAdminHost()) {
         throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Netlify Function.");
       }
@@ -2069,6 +1577,7 @@ async function toggleStock(id, button = null) {
       upsertLocalItem(result.item);
       toast(result.item.is_stoplisted ? "Блюдо добавлено в стоп-лист" : "Блюдо возвращено в продажу", "success");
       renderAll();
+      if (el.stopPickerDialog?.open) renderStopPicker();
       if (el.categoryDetailDialog?.open) renderCategoryDetail(result.item.category_id || item.category_id);
     } catch (error) {
       toast(toFriendlyError(error.message) || "Не удалось изменить стоп-лист", "danger");
@@ -2209,14 +1718,25 @@ function bindEvents() {
   el.categoryForm.addEventListener("submit", handleCategorySubmit);
   document.querySelector("[data-close-category]").addEventListener("click", () => el.categoryDialog.close());
   el.categorySplitForm?.addEventListener("submit", handleCategorySplitSubmit);
-  el.categorySplitForm?.addEventListener("input", (event) => {
-    if (event.target.matches("[name='target_one_name_ru'], [name='target_two_name_ru']")) renderCategorySplitItems();
-  });
-  el.categorySplitForm?.elements.source_category_id?.addEventListener("change", renderCategorySplitItems);
   document.querySelector("[data-close-category-split]")?.addEventListener("click", () => el.categorySplitDialog?.close());
-  el.categoryDeleteForm?.addEventListener("submit", handleCategoryDeleteSubmit);
-  document.querySelector("[data-close-category-delete]")?.addEventListener("click", () => el.categoryDeleteDialog?.close());
+  el.stopPickerSearch?.addEventListener("input", renderStopPicker);
+  [el.categoryDialog, el.categorySplitDialog, el.categoryDeleteDialog, el.categoryDetailDialog, el.stopPickerDialog].filter(Boolean).forEach((dialog) => {
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+  });
+  el.attentionModal?.addEventListener("click", (event) => {
+    if (event.target === el.attentionModal || event.target.closest("[data-attention-backdrop]")) closeAttentionPopup();
+  });
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !el.attentionModal?.hidden) closeAttentionPopup();
+    const attentionRow = event.target.closest?.("[data-attention-open-item]");
+    if (attentionRow && ["Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      closeAttentionPopup();
+      openItemDrawer(attentionRow.dataset.attentionOpenItem);
+      return;
+    }
     const row = event.target.closest?.("[data-open-category]");
     if (!row || !["Enter", " "].includes(event.key)) return;
     if (isInteractiveCategoryClick(event)) return;
@@ -2515,7 +2035,7 @@ async function translateCurrentItem(options = {}) {
       if (showToast) toast("Перевод выполнен", "success");
       return translations;
     } catch (error) {
-      console.warn("[exort-admin] auto-translate failed", error);
+      console.warn("[tekemet-admin] auto-translate failed", error);
       if (requestId !== getEditorTranslationMeta().requestId) return null;
       setTranslateStatus("error");
       if (showToast) toast("Автоперевод пока недоступен. Заполните перевод вручную.", "danger");
