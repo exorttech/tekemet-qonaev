@@ -635,7 +635,20 @@
 .demo-admin-live .restaurant-avatar { background:var(--accent-coral)!important; border-radius:6px; }
 
 .demo-admin-live .app-shell { grid-template-columns:272px minmax(0,1fr); background:#fff; }
-.demo-admin-live .sidebar { width:272px; padding:24px 16px 18px; background:#f5f7fa; border-right:1px solid #dce1e7; }
+.demo-admin-live .sidebar {
+  width:272px;
+  padding:24px 16px 18px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior-y:contain;
+  scrollbar-width:thin;
+  scrollbar-color:#c8cfd7 transparent;
+  background:#f5f7fa;
+  border-right:1px solid #dce1e7;
+}
+.demo-admin-live .sidebar::-webkit-scrollbar { width:6px; }
+.demo-admin-live .sidebar::-webkit-scrollbar-track { background:transparent; }
+.demo-admin-live .sidebar::-webkit-scrollbar-thumb { background:#c8cfd7; border-radius:999px; }
 .demo-admin-live .sidebar-restaurant { background:#fff; border-color:#dce1e7; border-radius:8px; box-shadow:none; }
 .demo-admin-live .side-nav>p { color:#89929d; letter-spacing:.11em; }
 .demo-admin-live .side-nav button { min-height:46px; color:#52605b; border-radius:6px; }
@@ -1303,7 +1316,7 @@ body.demo-admin-live:has(dialog[open]) { overflow:hidden; }
 @keyframes exort-panel-in { from { opacity:0; transform:translateY(10px) scale(.99); } }
 
 @media(min-width:821px) and (max-width:1024px) {
-  .demo-admin-live .sidebar { width:88px; padding-inline:10px; overflow:hidden; }
+  .demo-admin-live .sidebar { width:88px; padding-inline:10px; overflow-x:hidden; overflow-y:auto; }
   .demo-admin-live .sidebar-product { justify-items:center; padding-inline:0; text-align:center; }
   .demo-admin-live .sidebar-product strong { font-size:12px; white-space:nowrap; }
   .demo-admin-live .sidebar-product small,
