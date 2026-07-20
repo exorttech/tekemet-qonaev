@@ -607,6 +607,13 @@ async function trackAnalyticsEvent(env, slug, body) {
         os: cleanLimited(body.os, 80) || "",
         visitorId: cleanLimited(body.visitorId, 120) || "",
         pagePath: cleanLimited(body.pagePath || body.menuPageId, 180) || "",
+        pageReferrer: cleanLimited(body.referrer, 500) || "",
+        dishId: cleanLimited(menuItemId, 160) || "",
+        contentKey: cleanLimited(body.contentKey || body.content_key, 160) || "",
+        dishTitle: cleanLimited(body.dishTitleRu || body.dish_title_ru || body.title_ru || body.name_ru || body.dishTitle, 240) || "",
+        sectionKey: cleanLimited(body.sectionKey || body.section_key || body.categoryId || body.category_id, 120) || "",
+        price: cleanLimited(body.price || body.dishPrice, 80) || "",
+        currency: cleanLimited(body.currency, 16) || "",
       },
     });
 
@@ -907,7 +914,7 @@ async function writeAnalyticsEvent(env, slug, payload) {
     session_id: payload.sessionId || null,
     user_agent: payload.userAgent || null,
     referrer: packedDishReferrer || payload.referrer || null,
-    category_id: payload.sectionKey || null,
+    category_id: isUuid(payload.sectionKey) ? payload.sectionKey : null,
     qr_source_id: payload.qrSourceId || null,
     source_fallback: payload.sourceFallback || "direct",
     duration_ms: payload.durationMs,
@@ -1002,8 +1009,7 @@ async function resolveAnalyticsContentItemId(env, menuItemId, contentKey = "") {
 }
 
 function shouldUsePrimaryMenuItemId(value) {
-  const normalized = clean(value);
-  return Boolean(normalized && /^[1-9]\d*$/.test(normalized));
+  return isUuid(clean(value));
 }
 
 
@@ -1016,7 +1022,8 @@ function packDishAnalyticsReferrer(payload) {
   const price = cleanLimited(payload.price, 80) || "";
   const currency = cleanLimited(payload.currency, 16) || "";
   const durationMs = cleanLimited(payload.durationMs, 40) || "";
-  const encoded = Buffer.from(JSON.stringify({ dishId, contentKey, title, section, price, currency, durationMs }), "utf8").toString("base64url");
+  const referrer = cleanLimited(payload.referrer, 500) || "";
+  const encoded = Buffer.from(JSON.stringify({ dishId, contentKey, title, section, price, currency, durationMs, referrer }), "utf8").toString("base64url");
   return `dish:${encoded}`;
 }
 

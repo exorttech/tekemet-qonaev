@@ -4,16 +4,23 @@ async function getAnalyticsV2(env, slug, input = {}) {
   const restaurant = await getRestaurant(env, slug);
   const timeZone = restaurant.timezone || DEFAULT_TIME_ZONE;
   const period = resolvePeriod(input, timeZone);
+  const heatmapPeriod = resolveHeatmapPeriod(input, timeZone);
+  const eventsFrom = period.comparisonStart < heatmapPeriod.start ? period.comparisonStart : heatmapPeriod.start;
   const sourceId = isUuid(input.sourceId) ? input.sourceId : input.sourceId === "direct" ? "direct" : null;
-  const [events, items, qrSources] = await Promise.all([
-    fetchEvents(env, restaurant.id, utcDate(period.comparisonStart).toISOString(), sourceId === "direct" ? null : sourceId, timeZone),
-    rest(env, "content_items", { query: { select: "id,title_ru,title_kk,title_en,is_active", content_type: "eq.menu" } }),
+  const [primaryEvents, items, qrSources, fallbackEvents] = await Promise.all([
+    fetchEvents(env, restaurant.id, utcDate(eventsFrom).toISOString(), sourceId === "direct" ? null : sourceId, timeZone),
+    rest(env, "content_items", { query: { select: "id,content_key,title_ru,title_kk,title_en,is_active", content_type: "eq.menu" } }),
     rest(env, "qr_sources", { query: { select: "id,name,public_id,is_active,source_type", restaurant_id: `eq.${restaurant.id}` } }),
+    sourceId && sourceId !== "direct"
+      ? Promise.resolve([])
+      : fetchFallbackEvents(env, utcDate(eventsFrom).toISOString(), timeZone),
   ]);
+  const events = resolveDishEventItems([...primaryEvents, ...fallbackEvents], items);
 
   const selectedEvents = sourceId === "direct" ? events.filter(isDirectEvent) : events;
   const current = selectedEvents.filter((event) => inRange(event, period.start, period.end));
   const previous = selectedEvents.filter((event) => inRange(event, period.comparisonStart, period.comparisonEnd));
+  const heatmapEvents = selectedEvents.filter((event) => inRange(event, heatmapPeriod.start, heatmapPeriod.end));
   const currentMetrics = metrics(current);
   const previousMetrics = metrics(previous);
   const days = comparableDays(current, previous, period);
@@ -38,7 +45,8 @@ async function getAnalyticsV2(env, slug, input = {}) {
       timeline: timeline(current, period),
       hourly: hourlyAnalytics(current),
       activity: { days },
-      heatmap: heatmap(current, period),
+      heatmap: heatmap(heatmapEvents, heatmapPeriod),
+      heatmapPeriod,
       dishes,
       funnel: funnel(current, currentMetrics.sessions),
       insights: insights(currentMetrics, previousMetrics, days, dishes, current),
@@ -78,11 +86,129 @@ async function fetchEvents(env, restaurantId, fromIso, sourceId, timeZone) {
     rows.push(...page);
     if (page.length < 1000) break;
   }
-  return rows.map((event) => ({ ...event, ...localParts(event.created_at, timeZone) }));
+  return rows.map((event) => normalizeAnalyticsEvent(event, timeZone));
+}
+
+async function fetchFallbackEvents(env, fromIso, timeZone) {
+  try {
+    let rows;
+    try {
+      rows = await fetchFallbackEventRows(env, fromIso, true);
+    } catch {
+      rows = await fetchFallbackEventRows(env, fromIso, false);
+    }
+
+    return rows.map((row) => normalizeAnalyticsEvent({
+      id: `fallback-${row.id}`,
+      event_type: row.section_key,
+      menu_item_id: null,
+      language: row.title_en || null,
+      device_type: row.title_kk || null,
+      session_id: row.description_ru || null,
+      user_agent: null,
+      referrer: null,
+      created_at: row.created_at || new Date(Number(row.sort_order || 0) * 1000).toISOString(),
+      source_fallback: "direct",
+      duration_ms: normalizeStoredDuration(row.badge_ru),
+      metadata: {
+        dishId: row.title_ru || "",
+        dishTitle: row.description_en || "",
+        sectionKey: row.description_kk || "",
+      },
+    }, timeZone)).filter((event) => new Date(event.created_at).getTime() >= new Date(fromIso).getTime());
+  } catch (error) {
+    console.warn("[tekemet-analytics] fallback events are unavailable", error?.message || error);
+    return [];
+  }
+}
+
+async function fetchFallbackEventRows(env, fromIso, hasCreatedAt) {
+  const rows = [];
+  for (let offset = 0; offset < 20000; offset += 1000) {
+    const page = await rest(env, "content_items", {
+      query: {
+        select: `id,section_key,title_ru,title_en,title_kk,description_ru,description_en,description_kk,badge_ru,sort_order${hasCreatedAt ? ",created_at" : ""}`,
+        content_type: "eq.analytics_event",
+        ...(hasCreatedAt ? { created_at: `gte.${fromIso}`, order: "created_at.asc" } : { order: "sort_order.asc" }),
+        limit: "1000",
+        offset: String(offset),
+      },
+    });
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return rows;
+}
+
+function normalizeAnalyticsEvent(event, timeZone) {
+  const metadata = event?.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+    ? event.metadata
+    : {};
+  const packed = unpackDishAnalyticsReferrer(event?.referrer);
+  const packedReferrer = String(event?.referrer || "").startsWith("dish:");
+  const duration = event?.duration_ms ?? metadata.durationMs ?? packed.durationMs ?? null;
+  return {
+    ...event,
+    metadata,
+    dish_id: pointKey(event?.menu_item_id || metadata.dishId || metadata.menuItemId || packed.dishId),
+    content_key: pointKey(metadata.contentKey || packed.contentKey),
+    dish_title: pointKey(metadata.dishTitle || packed.title),
+    category_key: pointKey(event?.category_id || metadata.sectionKey || packed.section),
+    duration_ms: normalizeStoredDuration(duration),
+    referrer: pointKey(metadata.pageReferrer || packed.referrer || (packedReferrer ? "" : event?.referrer)),
+    ...localParts(event.created_at, timeZone),
+  };
+}
+
+function unpackDishAnalyticsReferrer(value) {
+  const referrer = String(value || "");
+  if (!referrer.startsWith("dish:")) return {};
+  try {
+    const decoded = Buffer.from(referrer.slice(5), "base64url").toString("utf8");
+    const payload = JSON.parse(decoded);
+    return payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeStoredDuration(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const duration = Number(value);
+  return Number.isFinite(duration) ? Math.max(0, Math.min(86400000, Math.round(duration))) : null;
+}
+
+function resolveDishEventItems(events, items) {
+  const aliases = new Map();
+  const titles = new Map();
+
+  for (const item of items) {
+    const id = pointKey(item.id);
+    [id, pointKey(item.content_key)].filter(Boolean).forEach((alias) => aliases.set(alias, id));
+    const title = normalizeDishTitle(item.name_ru || item.title_ru);
+    if (!title) continue;
+    if (!titles.has(title)) titles.set(title, id);
+    else titles.set(title, null);
+  }
+
+  return events.map((event) => {
+    const direct = [event.dish_id, event.menu_item_id, event.content_key]
+      .map(pointKey)
+      .find((candidate) => aliases.has(candidate));
+    const title = normalizeDishTitle(event.dish_title);
+    return {
+      ...event,
+      analytics_item_id: direct ? aliases.get(direct) : (title && titles.get(title)) || "",
+    };
+  });
+}
+
+function normalizeDishTitle(value) {
+  return String(value || "").trim().toLocaleLowerCase("ru-RU").replace(/\s+/g, " ");
 }
 
 function resolvePeriod(input, timeZone) {
-  const range = ["today", "7d", "30d", "all", "custom"].includes(input.range) ? input.range : "7d";
+  const range = ["today", "prev_week", "7d", "30d", "all", "custom"].includes(input.range) ? input.range : "7d";
   const today = dateKey(new Date(), timeZone);
   if (range === "all") {
     return {
@@ -97,6 +223,11 @@ function resolvePeriod(input, timeZone) {
   }
   let start = range === "today" ? today : shiftDate(today, range === "30d" ? -29 : -6);
   let end = shiftDate(today, 1);
+  if (range === "prev_week") {
+    const currentWeekStart = shiftDate(today, -((utcDate(today).getUTCDay() + 6) % 7));
+    start = shiftDate(currentWeekStart, -7);
+    end = currentWeekStart;
+  }
   if (range === "custom" && datePattern(input.startDate) && datePattern(input.endDate)) {
     start = input.startDate;
     const requestedDays = Math.round((utcDate(shiftDate(input.endDate, 1)) - utcDate(start)) / 86400000);
@@ -236,23 +367,24 @@ function heatmap(events, period) {
 }
 
 function dishAnalytics(current, previous, items, totalSessions) {
-  const currentOpens = current.filter((event) => event.event_type === "dish_open" && event.menu_item_id);
-  const previousOpens = previous.filter((event) => event.event_type === "dish_open" && event.menu_item_id);
-  const a = countBy(currentOpens, "menu_item_id");
-  const b = countBy(previousOpens, "menu_item_id");
+  const currentOpens = current.filter((event) => event.event_type === "dish_open" && event.analytics_item_id);
+  const previousOpens = previous.filter((event) => event.event_type === "dish_open" && event.analytics_item_id);
+  const a = countBy(currentOpens, "analytics_item_id");
+  const b = countBy(previousOpens, "analytics_item_id");
   return items.filter((item) => item.is_active !== false).map((item) => {
-    const opens = a[item.id] || 0;
-    const itemEvents = currentOpens.filter((event) => event.menu_item_id === item.id);
+    const itemId = pointKey(item.id);
+    const opens = a[itemId] || 0;
+    const itemEvents = currentOpens.filter((event) => event.analytics_item_id === itemId);
     const sessions = new Set(itemEvents.filter((event) => event.session_id).map((event) => event.session_id)).size;
-    const durations = current.filter((event) => event.event_type === "dish_close" && event.menu_item_id === item.id && Number(event.duration_ms) > 0).map((event) => Number(event.duration_ms));
+    const durations = current.filter((event) => event.event_type === "dish_close" && event.analytics_item_id === itemId && Number(event.duration_ms) > 0).map((event) => Number(event.duration_ms));
     return {
-      id: item.id,
+      id: itemId,
       title: String(item.name_ru || item.title_ru || "Блюдо").trim(),
       opens,
-      previousOpens: b[item.id] || 0,
+      previousOpens: b[itemId] || 0,
       sessionShare: totalSessions ? round((sessions / totalSessions) * 100) : 0,
       averageViewMs: durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null,
-      change: change(opens, b[item.id] || 0),
+      change: change(opens, b[itemId] || 0),
     };
   }).sort((left, right) => right.opens - left.opens);
 }
@@ -260,8 +392,8 @@ function dishAnalytics(current, previous, items, totalSessions) {
 function funnel(events, totalSessions) {
   const validSessions = sessionIds(events);
   const bySession = new Map();
-  events.filter((event) => event.event_type === "dish_open" && validSessions.has(event.session_id) && event.menu_item_id).forEach((event) => {
-    const set = bySession.get(event.session_id) || new Set(); set.add(event.menu_item_id); bySession.set(event.session_id, set);
+  events.filter((event) => event.event_type === "dish_open" && validSessions.has(event.session_id) && event.analytics_item_id).forEach((event) => {
+    const set = bySession.get(event.session_id) || new Set(); set.add(event.analytics_item_id); bySession.set(event.session_id, set);
   });
   const comparedDishes = new Set([...bySession.entries()].filter(([, set]) => set.size >= 2).map(([sessionId]) => sessionId));
   const studied = new Set(events.filter((event) => event.event_type === "menu_exit" && comparedDishes.has(event.session_id) && Number(event.duration_ms) >= 60000).map((event) => event.session_id));
@@ -346,12 +478,32 @@ function browserLabel(value) {
 
 function referrerLabel(value) {
   const referrer = String(value || "").trim();
-  if (!referrer) return "";
+  if (!referrer || referrer.startsWith("dish:")) return "";
   try {
-    return new URL(referrer).hostname.replace(/^www\./i, "") || referrer.slice(0, 120);
+    return friendlyReferrerHost(new URL(referrer).hostname) || "Другой сайт";
   } catch {
-    return referrer.slice(0, 120);
+    return "Другой сайт";
   }
+}
+
+function resolveHeatmapPeriod(input, timeZone) {
+  const range = input.heatmapRange === "prev_week" ? "prev_week" : "current_week";
+  const today = dateKey(new Date(), timeZone);
+  const currentWeekStart = shiftDate(today, -((utcDate(today).getUTCDay() + 6) % 7));
+  const start = range === "prev_week" ? shiftDate(currentWeekStart, -7) : currentWeekStart;
+  return { range, start, end: shiftDate(start, 7), dayCount: 7 };
+}
+
+function friendlyReferrerHost(value) {
+  const host = String(value || "").toLowerCase().replace(/^www\./, "");
+  if (!host) return "";
+  if (/(^|\.)instagram\.com$/.test(host)) return "Instagram";
+  if (/(^|\.)facebook\.com$|(^|\.)fb\.com$/.test(host)) return "Facebook";
+  if (/(^|\.)google\.|(^|\.)bing\.com$|(^|\.)yandex\./.test(host)) return "Поиск в интернете";
+  if (/(^|\.)t\.me$|(^|\.)telegram\./.test(host)) return "Telegram";
+  if (/(^|\.)wa\.me$|(^|\.)whatsapp\./.test(host)) return "WhatsApp";
+  if (/tekemetqonaev|exort/.test(host)) return "Сайт ресторана";
+  return host;
 }
 
 function dayDetails(events, period) {
@@ -369,7 +521,7 @@ function dayDetails(events, period) {
 }
 
 function recentEvents(events, items) {
-  const names = Object.fromEntries(items.map((item) => [item.id, String(item.name_ru || item.title_ru || "Позиция").trim()]));
+  const names = Object.fromEntries(items.map((item) => [pointKey(item.id), String(item.name_ru || item.title_ru || "Позиция").trim()]));
   const labels = {
     session_start: "Начало сессии",
     menu_open: "Открыто меню",
@@ -386,7 +538,9 @@ function recentEvents(events, items) {
       id: event.id,
       type: event.event_type,
       label: labels[event.event_type] || "Событие меню",
-      item: event.menu_item_id ? (names[event.menu_item_id] || "Удалённая позиция") : "",
+      item: event.analytics_item_id
+        ? (names[event.analytics_item_id] || event.dish_title || "Удалённая позиция")
+        : (event.dish_title || ""),
       language: event.language || "",
       device: event.device_type || "",
       source: event.source_fallback || "",

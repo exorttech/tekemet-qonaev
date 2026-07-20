@@ -28,10 +28,10 @@
   function getEndpointError(endpoint) {
     if (!isLocalhost()) return "";
     if (!endpoint) {
-      return "Для локального входа через Live Server укажите полный URL Netlify Function в window.TEKEMET_ADMIN_API или localStorage key tekemet.admin.apiUrl.";
+      return "Для локального входа укажите полный адрес административного сервиса в window.TEKEMET_ADMIN_API или настройке tekemet.admin.apiUrl.";
     }
     if (!/^https?:\/\//i.test(endpoint)) {
-      return "На локальном сервере API должен быть указан полным URL Netlify Function. Относительный путь для Live Server не подходит.";
+      return "На локальном сервере укажите полный адрес административного сервиса. Относительный адрес для Live Server не подходит.";
     }
     return "";
   }

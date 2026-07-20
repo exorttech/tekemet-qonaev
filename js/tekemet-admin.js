@@ -170,7 +170,7 @@ function getAdminApiConfigError() {
   if (explicitError) return explicitError;
   if (ADMIN_API_URL) return "";
   if (isLocalAdminHost()) {
-    return "Для локального входа укажите полный URL Netlify Function в window.TEKEMET_ADMIN_API или localStorage key tekemet.admin.apiUrl.";
+    return "Для локального входа укажите полный адрес административного сервиса в window.TEKEMET_ADMIN_API или настройке tekemet.admin.apiUrl.";
   }
   return "Адрес сервиса Exort Admin не настроен.";
 }
@@ -482,7 +482,7 @@ function renderMenuHeroPanel() {
         <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" data-menu-hero-file />
         <span>${image ? "Заменить фото" : "Загрузить фото"}</span>
       </label>
-      <small>Используется существующая запись Menu hero в Supabase.</small>
+      <small>Обложка синхронизируется с публичной страницей меню.</small>
     </div>
   `;
 }
@@ -1006,6 +1006,7 @@ function handleDocumentClick(event) {
   const edit = event.target.closest("[data-edit-item]")?.dataset.editItem;
   const attention = event.target.closest("[data-attention-view]")?.dataset.attentionView;
   const attentionIssue = event.target.closest("[data-attention-issue]")?.dataset.attentionIssue;
+  const attentionMoreCard = event.target.closest("[data-attention-more-card]");
   const attentionOpenItem = event.target.closest("[data-attention-open-item]")?.dataset.attentionOpenItem;
   const toggleCatButton = event.target.closest("[data-toggle-category]");
   const toggleCat = toggleCatButton?.dataset.toggleCategory;
@@ -1039,7 +1040,7 @@ function handleDocumentClick(event) {
   }
   if (attention) navigate(attention);
   if (attentionIssue) openAttentionPopup(attentionIssue);
-  if (event.target.closest("[data-attention-more]")) openAttentionSummary();
+  else if (event.target.closest("[data-attention-more]") || attentionMoreCard) openAttentionSummary();
   if (event.target.closest("[data-close-attention-modal]")) closeAttentionPopup();
   if (attentionOpenItem) { closeAttentionPopup(); openItemDrawer(attentionOpenItem); }
   if (event.target.closest("[data-logout]")) logout();
@@ -1555,7 +1556,7 @@ async function adminApi(action, payload = {}) {
 
     if ([404, 405, 500, 502, 503].includes(response.status)) {
       if (response.status === 405 && isLocalAdminHost()) {
-        throw new Error("Live Server не обрабатывает POST-запросы к API. Для локального входа укажите полный URL Netlify Function.");
+        throw new Error("Live Server не поддерживает вход в панель. Укажите полный адрес административного сервиса.");
       }
       throw new Error("Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort.");
     }
@@ -2147,9 +2148,10 @@ if (el.viewTitle && viewMeta[state.activeView]) {
 }
 
 function showLoginError(message) {
-  el.loginError.textContent = String(message || "").includes("Failed to fetch")
+  const friendlyMessage = toFriendlyError(message);
+  el.loginError.textContent = String(friendlyMessage || "").includes("Failed to fetch")
     ? "Сервис временно недоступен. Попробуйте обновить страницу или обратитесь в поддержку Exort."
-    : message;
+    : friendlyMessage;
 }
 
 function togglePinVisibility() {

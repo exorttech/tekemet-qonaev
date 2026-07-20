@@ -1,5 +1,5 @@
 (function () {
-  const state = { root: null, data: null, range: "today", sourceId: "all", dishTab: "leaders", loading: false, error: "", mounted: false, requestId: 0, detailOpen: false, dishDetailOpen: false, eventsDetailOpen: false, timelineSort: { key: "sortValue", direction: "asc" }, dishSort: { key: "default", direction: "asc" } };
+  const state = { root: null, data: null, range: "today", heatmapRange: "current_week", sourceId: "all", dishTab: "leaders", loading: false, error: "", mounted: false, requestId: 0, detailOpen: false, dishDetailOpen: false, eventsDetailOpen: false, timelineSort: { key: "sortValue", direction: "asc" }, dishSort: { key: "default", direction: "asc" } };
 
   async function mount(options = {}) {
     state.root = options.root || document.querySelector("[data-analytics-root]");
@@ -21,23 +21,23 @@
       if (state.loading && requestId === state.requestId) {
         state.loading = false;
         state.data = null;
-        state.error = "Аналитика не ответила за 22 секунды. Проверьте Netlify Function и повторите запрос.";
+        state.error = "Сервис аналитики не ответил. Повторите запрос или обратитесь в поддержку Exort.";
         render();
       }
     }, 22000);
     render();
     try {
-      const payload = { range: state.range, sourceId: state.sourceId === "all" ? "" : state.sourceId };
+      const payload = { range: state.range, heatmapRange: state.heatmapRange, sourceId: state.sourceId === "all" ? "" : state.sourceId };
       const result = await withTimeout(api("getAnalytics", payload), 20000);
       if (requestId !== state.requestId) return;
       if (!result?.analytics?.period || !result.analytics.summary || !Array.isArray(result.analytics.activity?.days)) {
-        throw new Error("Сервер аналитики ещё не обновлён до новой версии. Сначала примените SQL-миграцию и опубликуйте Netlify Function.");
+        throw new Error("Сервис аналитики требует обновления. Обратитесь в поддержку Exort.");
       }
       state.data = result.analytics;
       if (!Array.isArray(state.data.timeline)) state.data.timeline = legacyTimeline(state.data);
     } catch (error) {
       if (requestId !== state.requestId) return;
-      state.error = error?.message || "Не удалось загрузить аналитику.";
+      state.error = friendlyAnalyticsError(error);
     } finally {
       if (requestId === state.requestId) {
         window.clearTimeout(watchdogId);
@@ -87,7 +87,7 @@
       </div>
       ${timelineCard(data.timeline || [])}
       <div class="analytics-v2-two-column">
-        ${heatmapCard(data.heatmap || [])}
+        ${heatmapCard(data.heatmap || [], data.heatmapPeriod)}
         ${insightsCard(data.insights || [])}
       </div>
       ${dishCard(data.dishes || [])}
@@ -104,6 +104,12 @@
   }
 
   function periodButton(value, label) { return `<button class="${state.range === value ? "is-active" : ""}" type="button" data-analytics-period="${value}">${label}</button>`; }
+  function friendlyAnalyticsError(error) {
+    const message = String(error?.message || "");
+    return /Netlify|Cloudflare|Worker|Supabase|SERVICE_ROLE|SQL|backend|Admin API/i.test(message)
+      ? "Сервис аналитики временно недоступен. Повторите запрос или обратитесь в поддержку Exort."
+      : message || "Не удалось загрузить аналитику.";
+  }
 
   function metricCard(label, item, hint) {
     const hasValue = item?.value !== null && item?.value !== undefined;
@@ -123,10 +129,10 @@
 
   function timelineCard(rows) {
     const compactRows = [...rows].sort((a, b) => Number(a.sortValue) - Number(b.sortValue)).slice(-5);
-    return `<section class="analytics-v2-card analytics-timeline-card">
+    return `<section class="analytics-v2-card analytics-timeline-card analytics-more-card" data-analytics-detail-open role="button" tabindex="0" aria-label="Открыть подробную аналитику">
       <div class="analytics-v2-card-head"><div><p class="kicker">Динамика периода</p><h3>${state.range === "today" ? "Активность по часам" : state.range === "all" ? "Активность по месяцам" : "Активность по дням"}</h3></div></div>
       <div class="analytics-timeline-table-wrap analytics-timeline-table-wrap--compact">${timelineTable(compactRows, rows, false)}</div>
-      <div class="analytics-timeline-more"><button type="button" data-analytics-detail-open>Подробнее <span aria-hidden="true">→</span></button></div>
+      <div class="analytics-timeline-more"><span class="analytics-more-label">Подробнее <span aria-hidden="true">→</span></span></div>
     </section>`;
   }
 
@@ -204,7 +210,7 @@
     return max > 0 ? rows.find((row) => Number(row.sessions || 0) === max)?.key : "";
   }
 
-  function activePeriodLabel() { return ({ today: "Сегодня", "7d": "7 дней", "30d": "30 дней", all: "Всё время" }[state.range] || "Период"); }
+  function activePeriodLabel() { return ({ today: "Сегодня", prev_week: "Предыдущая неделя", "7d": "7 дней", "30d": "30 дней", all: "Всё время" }[state.range] || "Период"); }
 
   function legacyTimeline(data) {
     if (state.range === "today") {
@@ -239,9 +245,10 @@
 
 
 
-  function heatmapCard(rows) {
+  function heatmapCard(rows, period) {
     const max = Math.max(...rows.flatMap((row) => row.hours.map((hour) => hour.sessions)), 1);
-    return `<section class="analytics-v2-card heatmap-card"><div class="analytics-v2-card-head"><div><p class="kicker">Дни и часы</p><h3>Когда гости изучают меню</h3></div></div>
+    const previousWeek = (period?.range || state.heatmapRange) === "prev_week";
+    return `<section class="analytics-v2-card heatmap-card"><div class="analytics-v2-card-head"><div><p class="kicker">Дни и часы</p><h3>Когда гости изучают меню</h3></div><button class="heatmap-prev-period ${previousWeek ? "is-active" : ""}" type="button" data-heatmap-period="${previousWeek ? "current_week" : "prev_week"}">${previousWeek ? "Текущая неделя" : "Пред. неделя"}</button></div>
       <div class="heatmap-scroll"><div class="heatmap-grid"><div></div>${Array.from({ length: 16 }, (_, index) => `<span>${String(index + 8).padStart(2, "0")}</span>`).join("")}${rows.map((row) => `<strong>${row.label}</strong>${row.hours.map((hour) => `<i style="--intensity:${Math.max(0.04, hour.sessions / max)}" title="${escapeHtml(`${row.label}, ${String(hour.hour).padStart(2, "0")}:00 · ${hour.sessions} сессий · ${hour.dishOpens} открытий блюд`)}"></i>`).join("")}`).join("")}</div></div>
       <p class="analytics-note">Интенсивность цвета показывает количество сессий с 08:00 до 23:00.</p></section>`;
   }
@@ -252,9 +259,9 @@
 
   function dishCard(items) {
     const filtered = dishRows(items);
-    return `<section class="analytics-v2-card dish-analytics-card"><div class="analytics-v2-card-head"><div><p class="kicker">Интерес гостей</p><h3>Аналитика блюд</h3></div><div class="dish-tabs">${dishTab("leaders", "Лидеры")}${dishTab("growing", "Растущие")}${dishTab("falling", "Теряют интерес")}${dishTab("unopened", "Не открывают")}</div></div>
+    return `<section class="analytics-v2-card dish-analytics-card analytics-more-card" data-dish-detail-card><div class="analytics-v2-card-head"><div><p class="kicker">Интерес гостей</p><h3>Аналитика блюд</h3></div><div class="dish-tabs">${dishTab("leaders", "Лидеры")}${dishTab("growing", "Растущие")}${dishTab("falling", "Теряют интерес")}${dishTab("unopened", "Не открывают")}</div></div>
       <div class="analytics-table-scroll analytics-dish-table-scroll--compact">${dishTable(filtered.slice(0, 5), filtered, false)}</div>
-      <div class="analytics-timeline-more"><button type="button" data-dish-detail-open>Подробнее <span aria-hidden="true">→</span></button></div>
+      <div class="analytics-timeline-more"><button class="analytics-more-label" type="button" data-dish-detail-open>Подробнее <span aria-hidden="true">→</span></button></div>
     </section>`;
   }
   function dishTab(value, label) { return `<button class="${state.dishTab === value ? "is-active" : ""}" type="button" data-dish-tab="${value}">${label}</button>`; }
@@ -380,7 +387,7 @@
 
   function recentEventsCard(items, timeZone) {
     const compactItems = items.slice(0, 5);
-    return `<section class="analytics-v2-card recent-events-card"><div class="analytics-v2-card-head"><div><p class="kicker">Реальные события</p><h3>Последние действия</h3></div></div><ol class="recent-events-card__compact">${recentEventRows(compactItems, timeZone)}</ol><div class="analytics-timeline-more"><button type="button" data-events-detail-open>Подробнее <span aria-hidden="true">→</span></button></div></section>`;
+    return `<section class="analytics-v2-card recent-events-card analytics-more-card" data-events-detail-open role="button" tabindex="0" aria-label="Открыть все события за день"><div class="analytics-v2-card-head"><div><p class="kicker">Реальные события</p><h3>Последние действия</h3></div></div><ol class="recent-events-card__compact">${recentEventRows(compactItems, timeZone)}</ol><div class="analytics-timeline-more"><span class="analytics-more-label">Подробнее <span aria-hidden="true">→</span></span></div></section>`;
   }
 
   function recentEventsModal(items, timeZone) {
@@ -421,7 +428,7 @@
       requestAnimationFrame(() => state.root?.querySelector(".analytics-detail-close")?.focus());
       return;
     }
-    if (event.target.closest("[data-dish-detail-open]")) {
+    if ((event.target.closest("[data-dish-detail-open]") || event.target.closest("[data-dish-detail-card]")) && !event.target.closest("[data-dish-tab]")) {
       state.detailOpen = false;
       state.dishDetailOpen = true;
       state.eventsDetailOpen = false;
@@ -454,6 +461,8 @@
       render();
       return;
     }
+    const heatmapPeriod = event.target.closest("[data-heatmap-period]")?.dataset.heatmapPeriod;
+    if (heatmapPeriod) { state.heatmapRange = heatmapPeriod; load(); return; }
     const period = event.target.closest("[data-analytics-period]")?.dataset.analyticsPeriod;
     if (period) { state.range = period; state.timelineSort = { key: "sortValue", direction: "asc" }; state.dishSort = { key: "default", direction: "asc" }; load(); return; }
     const dish = event.target.closest("[data-dish-tab]")?.dataset.dishTab;
@@ -469,6 +478,12 @@
   }
 
   function onKeyDown(event) {
+    const card = event.target.closest?.(".analytics-more-card[data-analytics-detail-open], .analytics-more-card[data-events-detail-open]");
+    if (card && event.target === card && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      card.click();
+      return;
+    }
     if (event.key === "Escape" && (state.detailOpen || state.dishDetailOpen || state.eventsDetailOpen)) closeDetail();
   }
 

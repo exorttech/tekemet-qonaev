@@ -103,27 +103,27 @@
 
   function sourceCard(source) {
     const isDirect = isDirectSource(source);
-    return `<article class="qr-source-card qr-source-card--compact ${isDirect ? "qr-source-card--system" : ""}" data-source-card="${escapeHtml(source.id)}">
+    return `<article class="qr-source-card qr-source-card--compact ${isDirect ? "qr-source-card--system" : ""}" data-source-card="${escapeHtml(source.id)}" data-qr-details="${escapeHtml(source.id)}" role="button" tabindex="0" aria-label="Подробнее: ${escapeHtml(source.name)}">
       <header class="qr-source-title">
         <h4>${escapeHtml(source.name)}</h4>
         <span class="qr-status ${isDirect ? "is-system" : "is-active"}">${isDirect ? "Системный" : "Активен"}</span>
       </header>
       <div class="qr-compact-bottom">
         <strong>${formatVisits(source.visits)}</strong>
-        <button type="button" data-qr-details="${escapeHtml(source.id)}">Подробнее <span aria-hidden="true">→</span></button>
+        <span class="qr-card-more">Подробнее <span aria-hidden="true">→</span></span>
       </div>
     </article>`;
   }
 
   function wifiCard() {
-    return `<article class="qr-source-card qr-source-card--compact qr-source-card--wifi" data-wifi-card>
+    return `<article class="qr-source-card qr-source-card--compact qr-source-card--wifi" data-wifi-card data-wifi-details role="button" tabindex="0" aria-label="Подробнее: ${escapeHtml(state.wifi.ssid)}">
       <header class="qr-source-title">
         <h4>${escapeHtml(state.wifi.ssid)}</h4>
         <span class="qr-status is-local">Локальный</span>
       </header>
       <div class="qr-compact-bottom">
         <strong>Без аналитики</strong>
-        <button type="button" data-wifi-details>Подробнее <span aria-hidden="true">→</span></button>
+        <span class="qr-card-more">Подробнее <span aria-hidden="true">→</span></span>
       </div>
     </article>`;
   }
@@ -224,7 +224,7 @@
       <div class="qr-direct-audience-grid">
         ${renderAudienceList("Устройства", devices)}
         ${renderAudienceList("Браузеры и приложения", browsers)}
-        ${referrers.length ? renderAudienceList("Referrer", referrers) : ""}
+        ${referrers.length ? renderAudienceList("Откуда пришли гости", referrers) : ""}
       </div>
     </section>`;
   }
@@ -312,6 +312,12 @@
   }
 
   function handleKeydown(event) {
+    const card = event.target.closest?.(".qr-source-card--compact[data-qr-details], .qr-source-card--compact[data-wifi-details]");
+    if (card && event.target === card && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      card.click();
+      return;
+    }
     if (event.key === "Escape" && state.detail) closeDetails();
   }
 
@@ -498,7 +504,12 @@
     if (!window.TekemetAdminBridge?.api) return Promise.reject(new Error("Admin API is not ready."));
     return window.TekemetAdminBridge.api(action, payload);
   }
-  function friendly(error) { return error?.message || "Не удалось выполнить действие."; }
+  function friendly(error) {
+    const message = String(error?.message || "");
+    return /Netlify|Cloudflare|Worker|Supabase|SERVICE_ROLE|SQL|backend|Admin API/i.test(message)
+      ? "Сервис временно недоступен. Повторите попытку или обратитесь в поддержку Exort."
+      : message || "Не удалось выполнить действие.";
+  }
   function number(value) { return new Intl.NumberFormat("ru-RU").format(Number(value || 0)); }
   function formatVisits(value) {
     const count = Number(value || 0);
