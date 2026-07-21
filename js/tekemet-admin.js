@@ -1265,26 +1265,10 @@ function applyTheme(theme) {
 }
 
 function prepareImage(file) {
-  return new Promise((resolve, reject) => {
-    if (!file) return reject(new Error("Файл не выбран"));
-    if (file.size > 10 * 1024 * 1024) return reject(new Error("Файл больше 10 МБ"));
-    if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(file.type)) return reject(new Error("Поддерживаются JPG, PNG, WebP и AVIF"));
-
-    const image = new Image();
-    image.onload = () => {
-      const maxSide = 1600;
-      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(image.width * scale));
-      canvas.height = Math.max(1, Math.round(image.height * scale));
-      const context = canvas.getContext("2d");
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/webp", 0.84));
-      URL.revokeObjectURL(image.src);
-    };
-    image.onerror = () => reject(new Error("Не удалось прочитать изображение"));
-    image.src = URL.createObjectURL(file);
-  });
+  if (!window.AdminImageOptimizer?.prepare) {
+    return Promise.reject(new Error("Модуль оптимизации изображений не загрузился"));
+  }
+  return window.AdminImageOptimizer.prepare(file);
 }
 
 function ensureAdminEnhancements() {

@@ -1205,15 +1205,21 @@ function titleizeSection(sectionKey) {
 async function uploadImage(env, slug, filename, dataUrl) {
   const match = String(dataUrl || "").match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
   if (!match) throw new Error("Invalid image payload.");
+  if (match[1].toLowerCase() !== "image/webp") throw new Error("Image must be optimized to WebP before upload.");
 
   const bytes = base64ToBytes(match[2]);
-  if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Image is larger than 10 MB.");
+  if (bytes.byteLength > 800 * 1024) throw new Error("Optimized image is larger than 800 KB.");
+  if (bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46
+    || bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50) {
+    throw new Error("Invalid WebP image payload.");
+  }
 
   const path = `${slug}/${filename}`;
   const upload = await fetch(`${normalizeSupabaseUrl(env)}/storage/v1/object/${BUCKET}/${path}`, {
     method: "POST",
     headers: createSupabaseHeaders(env, {
       "Content-Type": "image/webp",
+      "Cache-Control": "public, max-age=31536000, immutable",
       "x-upsert": "true",
     }),
     body: bytes,
