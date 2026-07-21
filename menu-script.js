@@ -172,11 +172,11 @@ function getAdminFunctionUrlFallback() {
 
         const host = window.location.hostname || '';
         if (host === 'tekemetqonaev.com' || host.endsWith('.tekemetqonaev.com')) {
-            return '/.netlify/functions/tekemet-admin';
+            return '/api/tekemet-admin';
         }
     } catch {}
 
-    return 'https://tekemetqonaev.com/.netlify/functions/tekemet-admin';
+    return '/api/tekemet-admin';
 }
 
 function trackDishEventFallback(eventType, item, durationMs) {

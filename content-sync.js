@@ -6,7 +6,7 @@
     const RESTAURANT_SLUG = 'tekemet-qonaev';
     const locale = (document.documentElement.lang || 'ru').toLowerCase();
     const pageKind = document.body.classList.contains('menu-page') ? MENU_TYPE : ROOM_TYPE;
-    const DEFAULT_ADMIN_FUNCTION_URL = 'https://tekemetqonaev.com/.netlify/functions/tekemet-admin';
+    const DEFAULT_ADMIN_FUNCTION_URL = '/api/tekemet-admin';
 
     function getAdminFunctionUrl() {
         const configured = window.TEKEMET_ADMIN_API_URL
@@ -18,7 +18,7 @@
 
         const host = window.location.hostname || '';
         if (host === 'tekemetqonaev.com' || host.endsWith('.tekemetqonaev.com')) {
-            return '/.netlify/functions/tekemet-admin';
+            return '/api/tekemet-admin';
         }
 
         return DEFAULT_ADMIN_FUNCTION_URL;
