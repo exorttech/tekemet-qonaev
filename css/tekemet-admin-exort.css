@@ -961,13 +961,19 @@ body:has(.drawer[aria-hidden="false"]){
 
 .drawer-body{
   min-height:0 !important;
-  overflow:hidden !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:#aab3af #f3f5f4;
+  -webkit-overflow-scrolling:touch;
 }
 
 .editor-layout{
-  height:100% !important;
+  height:auto !important;
   min-height:0 !important;
-  overflow:hidden !important;
+  overflow:visible !important;
   grid-template-columns:minmax(360px,400px) minmax(0,1fr) !important;
   gap:22px !important;
 }
@@ -987,19 +993,23 @@ body:has(.drawer[aria-hidden="false"]){
   grid-column:auto !important;
   gap:16px !important;
   min-width:0;
-  max-height:100%;
-  overflow-y:auto;
-  overflow-x:hidden;
+  max-height:none;
+  overflow:visible;
   padding-right:8px;
   scrollbar-width:thin;
 }
 
-.editor-form-column::-webkit-scrollbar{
-  width:8px;
+.drawer-body::-webkit-scrollbar{
+  width:10px;
 }
 
-.editor-form-column::-webkit-scrollbar-thumb{
-  background:#cbd5e1;
+.drawer-body::-webkit-scrollbar-track{
+  background:#f3f5f4;
+}
+
+.drawer-body::-webkit-scrollbar-thumb{
+  background:#aab3af;
+  border:2px solid #f3f5f4;
   border-radius:999px;
 }
 

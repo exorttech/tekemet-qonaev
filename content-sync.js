@@ -365,7 +365,7 @@
                 }
 
                 const bookingLabel = (locale && locale.startsWith('en')) ? 'Book now' : 'ЗАБРОНИРОВАТЬ';
-                html += '<a href="https://wa.me/77072025888?text=' + encodeURIComponent('Hello! I would like to book a room at TEKEMET RESTO-HOTEL.') + '" class="btn btn--small" target="_blank" rel="noopener noreferrer">' + escapeHtml(bookingLabel) + '</a></div>';
+                html += '<a href="https://wa.me/87472025888?text=' + encodeURIComponent('Hello! I would like to book a room at TEKEMET RESTO-HOTEL.') + '" class="btn btn--small" target="_blank" rel="noopener noreferrer">' + escapeHtml(bookingLabel) + '</a></div>';
 
                 html += '</div>';
                 return html;
