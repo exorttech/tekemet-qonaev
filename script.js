@@ -153,7 +153,8 @@ if (!document.querySelector('.whatsapp-fab')) {
     const waText = waTextByLang[pageLang] || waTextByLang.ru;
     const waLink = document.createElement('a');
     waLink.className = 'whatsapp-fab';
-    waLink.href = 'https://wa.me/77072025888?text=' + encodeURIComponent(waText);
+    const waNumber = document.body.classList.contains('menu-page') ? '77072025888' : '87472025888';
+    waLink.href = 'https://wa.me/' + waNumber + '?text=' + encodeURIComponent(waText);
     waLink.target = '_blank';
     waLink.rel = 'noopener noreferrer';
     waLink.setAttribute('aria-label', 'WhatsApp');
