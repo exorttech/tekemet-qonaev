@@ -7,6 +7,7 @@
     const locale = (document.documentElement.lang || 'ru').toLowerCase();
     const pageKind = document.body.classList.contains('menu-page') ? MENU_TYPE : ROOM_TYPE;
     const DEFAULT_ADMIN_FUNCTION_URL = '/api/tekemet-admin';
+    const LOCAL_ADMIN_FUNCTION_URL = 'https://tekemet-qonaev.pages.dev/api/tekemet-admin';
 
     function getAdminFunctionUrl() {
         const configured = window.TEKEMET_ADMIN_API_URL
@@ -17,6 +18,9 @@
         }
 
         const host = window.location.hostname || '';
+        if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+            return LOCAL_ADMIN_FUNCTION_URL;
+        }
         if (host === 'tekemetqonaev.com' || host.endsWith('.tekemetqonaev.com')) {
             return '/api/tekemet-admin';
         }
@@ -365,7 +369,7 @@
                 }
 
                 const bookingLabel = (locale && locale.startsWith('en')) ? 'Book now' : 'ЗАБРОНИРОВАТЬ';
-                html += '<a href="https://wa.me/77072025888?text=' + encodeURIComponent('Hello! I would like to book a room at TEKEMET RESTO-HOTEL.') + '" class="btn btn--small" target="_blank" rel="noopener noreferrer">' + escapeHtml(bookingLabel) + '</a></div>';
+                html += '<a href="https://wa.me/87472025888?text=' + encodeURIComponent('Hello! I would like to book a room at TEKEMET RESTO-HOTEL.') + '" class="btn btn--small" target="_blank" rel="noopener noreferrer">' + escapeHtml(bookingLabel) + '</a></div>';
 
                 html += '</div>';
                 return html;

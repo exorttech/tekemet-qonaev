@@ -1,6 +1,6 @@
 (function initTekemetAdminApiConfig() {
   const PROD_ENDPOINT = "/api/tekemet-admin";
-  const LOCAL_FALLBACK_ENDPOINT = "/api/tekemet-admin";
+  const LOCAL_FALLBACK_ENDPOINT = "https://tekemet-qonaev.pages.dev/api/tekemet-admin";
   const STORAGE_KEY = "tekemet.admin.apiUrl";
   const META_SELECTOR = 'meta[name="tekemet-admin-api"]';
   const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);

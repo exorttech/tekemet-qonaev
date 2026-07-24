@@ -171,6 +171,9 @@ function getAdminFunctionUrlFallback() {
         if (configured) return configured;
 
         const host = window.location.hostname || '';
+        if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+            return 'https://tekemet-qonaev.pages.dev/api/tekemet-admin';
+        }
         if (host === 'tekemetqonaev.com' || host.endsWith('.tekemetqonaev.com')) {
             return '/api/tekemet-admin';
         }
